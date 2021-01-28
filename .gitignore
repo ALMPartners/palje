@@ -1,0 +1,22 @@
+.idea/
+__pycache__/
+_build/
+.cache/
+.swp/
+.vscode/
+.pytest_cache/
+*.suo
+*.egg-info/
+*.eggs
+
+# dev
+.venv/
+.tox/
+
+build/
+dist/
+
+config.json
+
+# version
+src/palje/version.py

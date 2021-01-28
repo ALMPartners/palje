@@ -1,0 +1,12 @@
+image: python:3.9
+
+pipelines:
+  default:
+    - step:
+        caches:
+          - pip
+        script:
+          - apt-get update
+          - apt-get -y install unixodbc-dev
+          - pip install tox
+          - tox -e py39

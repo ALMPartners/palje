@@ -1,0 +1,54 @@
+{
+    "report.ProductWeekly.id": {},
+    "report.ProductWeekly.product_id": {},
+    "report.ProductWeekly.sold_total_price": {},
+    "report.ProductWeekly.sold_units": {},
+    "report.ProductWeekly.week": {},
+    "report.ProductWeekly.year": {},
+    "store.Clients.address": {
+        "Description": "Clients address."
+    },
+    "store.Clients.date_of_birth": {
+        "Description": "Clients date of birth."
+    },
+    "store.Clients.email": {
+        "Description": "Clients email address."
+    },
+    "store.Clients.id": {
+        "Description": "Client ID or client number."
+    },
+    "store.Clients.name": {
+        "Description": "Clients name.",
+        "Flag": "GDPR"
+    },
+    "store.Clients.phone": {
+        "Description": "Clients phone number."
+    },
+    "store.Clients.zip_code": {
+        "Description": "Clients ZIP code."
+    },
+    "store.Products.category_id": {
+        "Description": "Product categorys ID."
+    },
+    "store.Products.description": {
+        "Description": "Product description."
+    },
+    "store.Products.id": {
+        "Description": "Product ID or product number."
+    },
+    "store.Products.manufacturer": {
+        "Description": "Product namufacturer."
+    },
+    "store.Products.name": {
+        "Description": "Product name."
+    },
+    "store.Products.package_weight": {
+        "Description": "Weight of single package."
+    },
+    "store.Products.unit_price": {
+        "Description": "Product unit price."
+    },
+    "store.Products.units_in_package": {
+        "Description": "How many units in package."
+    }
+}

@@ -1,0 +1,9 @@
+{
+    "report.ProductWeekly": {},
+    "store.Clients": {
+        "Description": "Client information."
+    },
+    "store.Products": {
+        "Description": "Product information."
+    }
+}
