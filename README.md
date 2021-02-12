@@ -107,6 +107,24 @@ Page MY_DB.store.spSELECT created.
 #### Page showing the table information
 ![Page "MY_DB.store.Clients"](https://github.com/ALMPartners/palje/blob/master/images/confluence_table.PNG?raw=true)
 
+### Re-run
+Re-running the command will result updating the existing pages
+```
+Page DATABASE: MY_DB updated.
+Page MY_DB.dbo updated.
+Page Tables MY_DB.dbo updated.
+Page MY_DB.dbo.schema_version updated.
+Page MY_DB.store updated.
+Page Tables MY_DB.store updated.
+Page MY_DB.store.Clients updated.
+Page MY_DB.store.Products updated.
+Page Procedures MY_DB.store updated.
+Page MY_DB.store.spSELECT updated.
+```
+If new objects have been created to database before re-run, new pages will be created for these objects. For example, if new procedure `store.spNEW_SELECT` is created to database, a new page `MY_DB.store.spNEW_SELECT` is created under page `Procedures MY_DB.store`.
+
+Notice that if you delete objects from database, Palje won't delete the corresponding pages from Confluence. You must manually delete the pages from wiki.
+
 ## Tests
 
 Run tests with [tox](https://pypi.org/project/tox/) 
