@@ -42,11 +42,8 @@ def description_header(description):
     p1 = ET.Element('p')
     macro = description_macro(description)
     p1.append(macro)
-    p2 = ET.Element('p')
-    ET.SubElement(p2, 'br')
     return ET.tostring(h1, encoding='unicode') + \
-        ET.tostring(p1, encoding='unicode') + \
-        ET.tostring(p2, encoding='unicode')
+        ET.tostring(p1, encoding='unicode')
 
 
 def description_macro(description):

@@ -23,10 +23,10 @@ def test_children_macro_should_match_string():
     assert ET.tostring(children_macro, encoding='unicode') == CHILDREN_MACRO
 
 
-def test_description_header_should_return_h1_p_and_p():
+def test_description_header_should_return_h1_and_p():
     description = DESCRIPTION_MACRO.format('test')
     assert storage_format.description_header(
-        'test') == f'<h1>Description</h1><p>{description}</p><p><br /></p>'
+        'test') == f'<h1>Description</h1><p>{description}</p>'
 
 
 def test_description_macro_should_return_element():

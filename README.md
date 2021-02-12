@@ -38,10 +38,10 @@ pip install [-e] .
 
 - Atlassian API Token for your account
     - Palje uses your registered account email and API token to authenticate to Confluence Cloud
-    - Go to https://id.atlassian.com/manage/api-tokens
-    - Choose "Create API token"
-    - Give it a name
-    - Token password will be created automatically, save this password
+        - Go to https://id.atlassian.com/manage/api-tokens
+        - Choose "Create API token"
+        - Give it a name
+        - Token password will be created automatically, save this password
 
 ## Remarks on compatibility
 
