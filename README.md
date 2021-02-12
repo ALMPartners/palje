@@ -99,10 +99,10 @@ Page MY_DB.store.spSELECT created.
 ```
 ### Result
 #### Page hierarchy in Confluence
-![Page hierarchy in Confluence](https://github.com/ALMPartners/palje/blob/master/images/confluence_database.PNG?raw=true)
+![Page hierarchy in Confluence](https://github.com/ALMPartners/palje/blob/master/images/confluence_hierarchy.PNG?raw=true)
 
 #### Page showing the database objects
-![Page "DATABASE: MY_DB"](https://github.com/ALMPartners/palje/blob/master/images/confluence_hierarchy.PNG?raw=true)
+![Page "DATABASE: MY_DB"](https://github.com/ALMPartners/palje/blob/master/images/confluence_database.PNG?raw=true)
 
 #### Page showing the table information
 ![Page "MY_DB.store.Clients"](https://github.com/ALMPartners/palje/blob/master/images/confluence_table.PNG?raw=true)
