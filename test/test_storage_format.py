@@ -4,8 +4,8 @@ import palje.storage_format as storage_format
 
 CHILDREN_MACRO = '<ac:structured-macro ac:macro-id="3f6a7cbe-2142-47ac-a9ef-a5226c237a51" ac:name="children" ac:schema-version="2"><ac:parameter ac:name="all">true</ac:parameter><ac:parameter ac:name="excerptType">simple</ac:parameter></ac:structured-macro>'
 DESCRIPTION_MACRO = '<ac:structured-macro ac:macro-id="3f6a7cbe-2142-47ac-a9ef-a5226c237a52" ac:name="excerpt" ac:schema-version="2"><ac:rich-text-body>{}</ac:rich-text-body></ac:structured-macro>'
-TABLE_INPUT = [{'Title1': 'A', 'Title2': 'B'}, {'Title1': 'C', 'Title2': 'D'}]
-TABLE_OUTPUT = '<table><tbody><tr><th>Title1</th><th>Title2</th></tr><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></tbody></table>'
+TABLE_INPUT = [{'Title1': 'A', 'Title2': 'B'}, {'Title1': 'C', 'Title2': "D's"}]
+TABLE_OUTPUT = "<table><tbody><tr><th>Title1</th><th>Title2</th></tr><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D's</td></tr></tbody></table>"
 
 
 def test_objects_list_should_return_h1_and_p():

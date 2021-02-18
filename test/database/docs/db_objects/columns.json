@@ -12,7 +12,7 @@
         "Description": "Clients date of birth."
     },
     "store.Clients.email": {
-        "Description": "Clients email address."
+        "Description": "Client's email address."
     },
     "store.Clients.id": {
         "Description": "Client ID or client number."
@@ -22,10 +22,10 @@
         "Flag": "GDPR"
     },
     "store.Clients.phone": {
-        "Description": "Clients phone number."
+        "Description": "Client's phone number."
     },
     "store.Clients.zip_code": {
-        "Description": "Clients ZIP code."
+        "Description": "Client's ZIP code."
     },
     "store.Products.category_id": {
         "Description": "Product categorys ID."

@@ -54,7 +54,7 @@ def description_macro(description):
         "ac:schema-version": "2"
     })
     body = ET.Element('ac:rich-text-body')
-    body.text = escape(description)
+    body.text = escape(description, quote=False)
     macro.append(body)
     return macro
 
@@ -66,7 +66,7 @@ def html_table(rows):
     tr = ET.Element('tr')
     for header in rows[0].keys():
         th = ET.Element('th')
-        th.text = escape(header)
+        th.text = escape(header, quote=False)
         tr.append(th)
     tbody.append(tr)
     # rows
@@ -78,10 +78,11 @@ def html_table(rows):
             if isinstance(value, list):    # value is list of dicts
                 for dictionary in value:
                     p = ET.Element('p')
-                    p.text = ' '.join([val for val in dictionary.values()])
+                    p.text = ' '.join([escape(val, quote=False)
+                                       for val in dictionary.values()])
                     td.append(p)
             else:
-                td.text = escape(value)    # value is string or number
+                td.text = escape(value, quote=False)    # value is string or number
             tr.append(td)
         tbody.append(tr)
     table = ET.Element('table')
