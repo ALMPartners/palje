@@ -46,7 +46,8 @@ pip install [-e] .
 ## Remarks on compatibility
 
 - Palje has been tested on multiple SQL Server versions, including [SQL Server images](https://hub.docker.com/_/microsoft-mssql-server)
-    - Palje has not been tested on cloud instances, such as Azure SQL Database
+- Palje has been tested on cloud instances, such as Azure SQL Database
+    - We are not (yet) executing regular testing on such instances
 - Palje has been tested to work with Confluence Cloud
     - There is a possibility that Palje works with Confluence Server since the Server REST API is similar to Cloud REST API
     - Notice that the authentication works differently in Confluence Server
