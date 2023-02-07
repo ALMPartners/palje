@@ -20,10 +20,11 @@ DATABASE_OBJECT_TYPES = {
 
 
 class MSSQLDatabase():
-    def __init__(self, server, database, driver):
+    def __init__(self, server, database, driver, authentication):
         self.server = server
         self.database = database
         self.driver = driver
+        self.authentication = authentication
         self.connection = None
         self.queries = self._read_queries_from_ini()
 
@@ -52,12 +53,16 @@ class MSSQLDatabase():
                 'Failed to close the database connection. Most likely because the connection is already closed.')
 
     def _ask_credentials(self):
-        uid = input(
-            f'User for {self.server}.{self.database}. If you wish to use Windows Authentication, hit enter: ')
-        if uid:
-            pwd = getpass.getpass(f'Password for user {uid}: ')
-            return f'DRIVER={{{self.driver}}};SERVER={self.server};DATABASE={self.database};UID={uid};PWD={pwd}'
-        return f'DRIVER={{{self.driver}}};SERVER={self.server};DATABASE={self.database};Trusted_Connection=yes;'
+        if self.authentication == "SQL":
+            uid = input(
+                f'User for {self.server}.{self.database}. If you wish to use Windows Authentication, hit enter: ')
+            if uid:
+                pwd = getpass.getpass(f'Password for user {uid}: ')
+                return f'DRIVER={{{self.driver}}};SERVER={self.server};DATABASE={self.database};UID={uid};PWD={pwd}'
+        elif self.authentication == "Windows":
+            return f'DRIVER={{{self.driver}}};SERVER={self.server};DATABASE={self.database};Trusted_Connection=yes;'
+        elif self.authentication == "AAD":
+             return f'DRIVER={{{self.driver}}};SERVER={self.server};DATABASE={self.database};Trusted_Connection=yes;Authentication=ActiveDirectoryInteractive;'
 
     def get_databases(self):
         """Return list of database names."""

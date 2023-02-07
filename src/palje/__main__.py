@@ -14,9 +14,9 @@ from .mssql_database import MSSQLDatabase, DATABASE_OBJECT_TYPES
 def main(argv):
     global WIKI, DB, SPACE
     # TODO: possibility to read params from config?
-    confluence_url, SPACE, parent_page, server, database, schema_filter, database_filter, driver = parse_arguments(argv)
+    confluence_url, SPACE, parent_page, server, database, schema_filter, database_filter, driver, authentication = parse_arguments(argv)
     # ============ DATABASE CONNECTION ============
-    DB = MSSQLDatabase(server, database, driver)
+    DB = MSSQLDatabase(server, database, driver, authentication)
     DB.connect()
     # =========== CONFLUENCE CONNECTION ===========
     WIKI = ConfluenceREST(confluence_url)
@@ -62,6 +62,9 @@ def parse_arguments(args):
                         help='Names of the databases, where object dependencies are sought. If not given, dependencies are sought only in documented database.')
     parser.add_argument('--db-driver', default="ODBC Driver 17 for SQL Server",
                         help='Name of the database driver.')
+    parser.add_argument('--authentication', default="SQL",
+                        help='Authentication method to database. If not provided, SQL authentication is used. Other options are "Windows" (Windwos authentication will be used) \
+                             and "AAD" (Azure Active Directory login will be prompted) ')
     args = vars(parser.parse_args(args))
     return (
         args.get('confluence-url'),
@@ -71,7 +74,8 @@ def parse_arguments(args):
         args.get('database'),
         args.get('schemas'),
         args.get('dependent'),
-        args.get('db_driver', 'ODBC Driver 17 for SQL Server')
+        args.get('db_driver', 'ODBC Driver 17 for SQL Server'),
+        args.get('authentication', 'SQL')
     )
 
 
