@@ -53,16 +53,20 @@ class MSSQLDatabase():
                 'Failed to close the database connection. Most likely because the connection is already closed.')
 
     def _ask_credentials(self):
-        if self.authentication == "SQL":
+        conn_str = f'DRIVER={{{self.driver}}};SERVER={self.server};DATABASE={self.database}'
+        if self.authentication == 'SQL':
             uid = input(
                 f'User for {self.server}.{self.database}. If you wish to use Windows Authentication, hit enter: ')
             if uid:
                 pwd = getpass.getpass(f'Password for user {uid}: ')
-                return f'DRIVER={{{self.driver}}};SERVER={self.server};DATABASE={self.database};UID={uid};PWD={pwd}'
-        elif self.authentication == "Windows":
-            return f'DRIVER={{{self.driver}}};SERVER={self.server};DATABASE={self.database};Trusted_Connection=yes;'
-        elif self.authentication == "AAD":
-             return f'DRIVER={{{self.driver}}};SERVER={self.server};DATABASE={self.database};Trusted_Connection=yes;Authentication=ActiveDirectoryInteractive;'
+                conn_str = f'{conn_str};UID={uid};PWD={pwd}'
+            else: 
+                conn_str = f'{conn_str};Trusted_Connection=yes;'
+        elif self.authentication == 'Windows':
+            conn_str = f'{conn_str};Trusted_Connection=yes;'
+        elif self.authentication == 'AAD':
+            conn_str = f'{conn_str};Authentication=ActiveDirectoryInteractive;'
+        return conn_str
 
     def get_databases(self):
         """Return list of database names."""

@@ -23,7 +23,8 @@ def mssql_config(request):
         server = mssql_host + ',' + request.config.getoption('mssql_port')
     else:
         server = ''
-    return (server, TEST_DB_NAME, request.config.getoption('mssql_driver'))
+    authentication = 'SQL'
+    return (server, TEST_DB_NAME, request.config.getoption('mssql_driver'), authentication)
 
 
 @pytest.fixture(scope='function')
