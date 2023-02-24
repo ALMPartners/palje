@@ -107,6 +107,12 @@ class ConfluenceREST:
             data = json.dumps({"type": "page",
                                "title": page_title,
                                "space": {"key": space_key},
+                               "metadata": {
+                                   "properties": {
+                                       "content-appearance-draft": {"value": "full-width"},
+                                       "content-appearance-published": {"value": "full-width"}
+                                       }
+                                    },
                                "body": {"storage": {"value": page_content, "representation": "storage"}},
                                "ancestors": [{"id": parent_id}]
                                })
@@ -114,6 +120,12 @@ class ConfluenceREST:
             data = json.dumps({"type": "page",
                                "title": page_title,
                                "space": {"key": space_key},
+                               "metadata": {
+                                   "properties": {
+                                       "content-appearance-draft": {"value": "full-width"},
+                                       "content-appearance-published": {"value": "full-width"}
+                                       }
+                                    },
                                "body": {"storage": {"value": page_content, "representation": "storage"}}
                                })
         r = post(self.content_url,
