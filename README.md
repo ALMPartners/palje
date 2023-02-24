@@ -47,7 +47,7 @@ pip install [-e] .
 
 - Palje has been tested on multiple SQL Server versions, including [SQL Server images](https://hub.docker.com/_/microsoft-mssql-server)
 - Palje has been tested on cloud instances, such as Azure SQL Database
-    - We are not (yet) executing regular testing on such instances
+    - Palje supports Azure Active Directory authentication with argument --authentication "AAD"
 - Palje has been tested to work with Confluence Cloud
     - There is a possibility that Palje works with Confluence Server since the Server REST API is similar to Cloud REST API
     - Notice that the authentication works differently in Confluence Server
@@ -59,6 +59,7 @@ python -m palje confluence-url space server database
                 --schemas SCHEMAS [SCHEMAS ...]
                 --dependent DEPENDENT [DEPENDENT ...]
                 --db-driver DB_DRIVER
+                --authentication AUTHENTICATION
 ```
 | Argument  | Required | Description | Type | Default Value |
 | --- | --- | --- | --- | --- |
@@ -70,13 +71,15 @@ python -m palje confluence-url space server database
 | schemas | No | Names of the schemas that are documented | list of str | If schemas not given, all schemas will be documented |
 | dependent | No | Names of the databases, where object dependencies are sought | list of str | If databases not given, dependencies are sought only in documented database |
 | db-driver | No | Name of the database driver | str | "ODBC Driver 17 for SQL Server" |
-
+| authentication | No | Authentication method to use. Options are "SQL", "Windows", "AAD" | str | "SQL"
+ 
 
 ## Usage example
 ### Command
 ```
 cd .\palje
-python -m palje "https://yourconfluence.atlassian.net/wiki/rest/api/content" TEST "localhost,1433" MY_DB --schemas dbo store --dependent MY_OTHER_DB
+python -m palje "https://yourconfluence.atlassian.net/wiki/rest/api/content" TEST "localhost,1433" MY_DB --schemas dbo store --dependent MY_OTHER_DB --authentication "SQL"
+
 ```
 ### Output
 ```
