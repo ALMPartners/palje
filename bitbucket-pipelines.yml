@@ -1,5 +1,9 @@
 image: python:3.9
 
+options:
+  # Set maximum execution time for each step
+  max-time: 5
+
 pipelines:
   default:
     - step:
