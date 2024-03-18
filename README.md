@@ -61,6 +61,7 @@ python -m palje confluence-url space server database
                 --db-driver DB_DRIVER
                 --authentication AUTHENTICATION
 ```
+
 | Argument  | Required | Description | Type | Default Value |
 | --- | --- | --- | --- | --- |
 | confluence-url | Yes | URL to Confluence REST content. In Confluence Cloud, this is something like https://yourconfluence.atlassian.net/wiki/rest/api/content | str |  |
@@ -71,7 +72,7 @@ python -m palje confluence-url space server database
 | schemas | No | Names of the schemas that are documented | list of str | If schemas not given, all schemas will be documented |
 | dependent | No | Names of the databases, where object dependencies are sought | list of str | If databases not given, dependencies are sought only in documented database |
 | db-driver | No | Name of the database driver | str | "ODBC Driver 17 for SQL Server" |
-| authentication | No | Authentication method to use. Options are "SQL", "Windows", "AAD" | str | "SQL"
+| authentication | No | Authentication method to use. Options are "SQL", "Windows", "AAD" and "AzureIdentity". | str | "SQL"
  
 
 ## Usage example

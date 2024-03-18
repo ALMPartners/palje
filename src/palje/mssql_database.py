@@ -5,10 +5,12 @@
 
 """Module for querying data from MSSQL database."""
 import getpass
+import struct
+import pyodbc
+import importlib
 from os import path
 from configparser import ConfigParser
 
-import pyodbc
 
 QUERY_FILE = 'queries/database_queries.ini'
 DATABASE_OBJECT_TYPES = {
@@ -17,6 +19,7 @@ DATABASE_OBJECT_TYPES = {
     'PROCEDURE': 'Procedures',
     'FUNCTION': 'Functions'
 }
+SQL_COPT_SS_ACCESS_TOKEN = 1256  # This connection option is defined by microsoft in msodbcsql.h
 
 
 class MSSQLDatabase():
@@ -39,7 +42,13 @@ class MSSQLDatabase():
     def connect(self):
         connection_str = self._ask_credentials()
         try:
-            self.connection = pyodbc.connect(connection_str)
+            if self.authentication == "AzureIdentity":
+                self.connection = pyodbc.connect(
+                    connection_str,
+                    attrs_before={SQL_COPT_SS_ACCESS_TOKEN: self.get_az_token()}
+                )
+            else:
+                self.connection = pyodbc.connect(connection_str)
         except:
             print(
                 f'Failed to connect to {self.server}.{self.database}. Check your server details, username and password.')
@@ -66,7 +75,16 @@ class MSSQLDatabase():
             conn_str = f'{conn_str};Trusted_Connection=yes;'
         elif self.authentication == 'AAD':
             conn_str = f'{conn_str};Authentication=ActiveDirectoryInteractive;'
+        elif self.authentication == 'AzureIdentity':
+            conn_str = f'{conn_str};Authentication=ActiveDirectoryInteractive;Trusted_Connection=no;Encrypt=yes;'
         return conn_str
+
+    def get_az_token(self):
+        identity = importlib.import_module('.identity', 'azure')
+        credential = identity.DefaultAzureCredential(exclude_interactive_browser_credential=False)
+        token_bytes = credential.get_token("https://database.windows.net/.default").token.encode("UTF-16-LE")
+        token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+        return token_struct
 
     def get_databases(self):
         """Return list of database names."""
