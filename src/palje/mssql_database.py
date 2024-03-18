@@ -42,7 +42,7 @@ class MSSQLDatabase():
     def connect(self):
         connection_str = self._ask_credentials()
         try:
-            if self.authentication == "AzureIdentity":
+            if self.authentication.lower() == "azureidentity":
                 self.connection = pyodbc.connect(
                     connection_str,
                     attrs_before={SQL_COPT_SS_ACCESS_TOKEN: self.get_az_token()}
@@ -75,8 +75,6 @@ class MSSQLDatabase():
             conn_str = f'{conn_str};Trusted_Connection=yes;'
         elif self.authentication == 'AAD':
             conn_str = f'{conn_str};Authentication=ActiveDirectoryInteractive;'
-        elif self.authentication == 'AzureIdentity':
-            conn_str = f'{conn_str};Authentication=ActiveDirectoryInteractive;Trusted_Connection=no;Encrypt=yes;'
         return conn_str
 
     def get_az_token(self):
