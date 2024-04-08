@@ -6,6 +6,7 @@ license = {file = "LICENSE"}
 keywords = ["palje"]
 dynamic = ["version"]
 dependencies = [
+    "azure-identity ~= 1.14",
     "sqlalchemy[mssql] ~= 2.0.29",
     "requests ~= 2.31.0"
 ]
