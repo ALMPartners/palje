@@ -16,34 +16,34 @@ class TestWithHTTPServer():
     def test_login_should_succeed_for_available_user(self, monkeypatch, credentials):
         monkeypatch.setattr('builtins.input', lambda x: credentials['user'])
         monkeypatch.setattr('getpass.getpass', lambda x: credentials['password'])
-        self.wiki.login()
+        self.wiki.verify_credentials()
 
     def test_login_should_fail_for_unavailable_user(self, monkeypatch):
         credentials = {'user': 'Salla', 'password': 'tyhja'}
         monkeypatch.setattr('builtins.input', lambda x: credentials['user'])
         monkeypatch.setattr('getpass.getpass', lambda x: credentials['password'])
         with pytest.raises(SystemExit):
-            self.wiki.login()
+            self.wiki.verify_credentials()
 
     @pytest.mark.parametrize("page", AVAILABLE_PAGES[:2])
     def test_id_should_be_returned_for_available_page(self, page):
-        page_id = self.wiki.get_page_id(page['spaceKey'], page['title'])
+        page_id = self.wiki.get_page_id(page['space-id'], page['title'])
         assert page_id == page['id']
 
     def test_None_should_be_returned_for_unavailable_page(self):
-        page = {"spaceKey": "TEST", 'title': "does_not_exists", "id": None}
-        page_id = self.wiki.get_page_id(page['spaceKey'], page['title'])
+        page = {"space-id": "TEST", 'title': "does_not_exists", "id": None}
+        page_id = self.wiki.get_page_id(page['space-id'], page['title'])
         assert page_id == page['id']
 
     def test_new_page_should_succeed_if_page_does_not_exist(self, capsys):
-        page = {"spaceKey": "TEST", 'title': "does_not_exists"}
-        self.wiki.new_page(page['spaceKey'], page['title'], 'moi')
+        page = {"space-id": "1", 'title': "does_not_exists"}
+        self.wiki.new_page(page['space-id'], page['title'], 'moi')
         captured = capsys.readouterr()
         assert f"Page {page['title']} created." in captured.out
 
     @pytest.mark.parametrize("page", AVAILABLE_PAGES[:2])
     def test_new_page_should_fail_if_title_exists(self, page, capsys):
-        self.wiki.new_page(page['spaceKey'], page['title'], 'moi')
+        self.wiki.new_page(page['space-id'], page['title'], 'moi')
         captured = capsys.readouterr()
         assert f"Failed to create page {page['title']}." in captured.out
 
@@ -58,4 +58,4 @@ class TestWithHTTPServer():
         else:
             self.wiki.update_page(page['id'], page['title'], 'moi')
             captured = capsys.readouterr()
-            assert f"Update failed: failed to retrieve the version number of page {page['title']}." in captured.out
+            assert f"Failed to retrieve the version number of page {page['title']}." in captured.out

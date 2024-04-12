@@ -12,25 +12,30 @@ from .mssql_database import MSSQLDatabase, DATABASE_OBJECT_TYPES
 
 
 def main(argv):
-    global WIKI, DB, SPACE
+    global WIKI, DB, SPACE, space_id
     # TODO: possibility to read params from config?
-    confluence_url, SPACE, parent_page, server, database, schema_filter, database_filter, driver, authentication = parse_arguments(argv)
+    (confluence_url, SPACE, parent_page, server, database,
+        schema_filter, database_filter, driver, authentication) = parse_arguments(argv)
     # ============ DATABASE CONNECTION ============
     DB = MSSQLDatabase(server, database, driver, authentication)
     DB.connect()
     # =========== CONFLUENCE CONNECTION ===========
     WIKI = ConfluenceREST(confluence_url)
-    WIKI.login()
+    WIKI.verify_credentials()
+    space_id = WIKI.get_space_id(SPACE)
+    if not space_id:
+        print(f'Failed to retrieve the id of space {SPACE}. Aborting.')
+        quit()
     # ============ SCHEMAS TO DOCUMENT ============
     schemas = collect_schemas_to_document(schema_filter)
     # ==== DATABASES WHERE TO SEEK DEPENDENCIES ===
     dep_databases = collect_databases_to_query_dependencies(database_filter)
     print("--------------------------")
-    print(
-        f"Object dependencies are queried from the following databases: {', '.join(dep_databases)}")
+    print(f"Object dependencies are queried from the following databases: " +
+          f"{', '.join(dep_databases)}")
     print("--------------------------")
     # ================= ROOT PAGE =================
-    root_page_id = create_and_update_root_page(parent_page)
+    root_page_id = create_or_update_root_page(space_id, parent_page)
     # ================ OTHER PAGES ================
     for schema in schemas:
         schema_page_id = create_and_update_schema_page(root_page_id, schema)
@@ -125,23 +130,30 @@ def collect_objects_to_document(schema):
     return objects
 
 
-def create_and_update_root_page(parent_page):
-    """If parent page given, parent page is the root page.
-    If root page exists, update it.
-    Else, create the root page.
+def create_or_update_root_page(space_id, page_name=None):
+    """Create or update the root page of the documentation.
+
+    If a page name is given, that will be used as the name of the root
+    page. If no name is given, the default name 'DATABASE: <name-of-db>'
+    is used.
+
+    If a page already exists with the page name it and it's children
+    will be updated, otherwise new pages will be created.
     """
-    root_page_content = storage_format.objects_list()
-    if parent_page:
-        root_page_name = parent_page
+    default_page_name = 'DATABASE: ' + DB.database
+    page_content = storage_format.objects_list()
+    page_id = None
+
+    if not page_name:
+        page_name = default_page_name
+
+    page_id = WIKI.get_page_id(space_id, page_name)
+
+    if page_id:
+        WIKI.update_page(page_id, page_name, page_content)
     else:
-        root_page_name = 'DATABASE: ' + DB.database
-    root_page_id = WIKI.get_page_id(SPACE, root_page_name)
-    if root_page_id:
-        WIKI.update_page(root_page_id, root_page_name, root_page_content)
-    else:
-        WIKI.new_page(SPACE, root_page_name, root_page_content)
-        root_page_id = WIKI.get_page_id(SPACE, root_page_name)
-    return root_page_id
+        page_id = WIKI.new_page(space_id, page_name, page_content)
+    return page_id
 
 
 def create_and_update_schema_page(root_page_id, schema):
@@ -150,18 +162,18 @@ def create_and_update_schema_page(root_page_id, schema):
     If page exists, update it.
     Else, create schema page under root page.
     """
+    schema_page_name = DB.database + '.' + schema
     description = DB.get_schema_description(schema)
     schema_page_content = storage_format.description_header(description) + \
         storage_format.objects_list()
-    # check schema page existence and update page
-    schema_page_name = DB.database + '.' + schema
-    schema_page_id = WIKI.get_page_id(SPACE, schema_page_name)
+
+    schema_page_id = WIKI.get_page_id(space_id, schema_page_name)
     if schema_page_id:
         WIKI.update_page(schema_page_id, schema_page_name, schema_page_content)
     else:
-        WIKI.new_page(SPACE, schema_page_name,
-                      schema_page_content, root_page_id)
-        schema_page_id = WIKI.get_page_id(SPACE, schema_page_name)
+        schema_page_id = WIKI.new_page(
+            space_id, schema_page_name, schema_page_content, root_page_id)
+
     return schema_page_id
 
 
@@ -172,16 +184,18 @@ def create_and_update_object_type_page(schema_page_id, schema, object_type):
     """
     type_page_name = object_type + ' ' + DB.database + '.' + schema
     type_page_content = storage_format.objects_list()
-    type_page_id = WIKI.get_page_id(SPACE, type_page_name)
+
+    type_page_id = WIKI.get_page_id(space_id, type_page_name)
     if type_page_id:
         WIKI.update_page(type_page_id, type_page_name, type_page_content)
     else:
-        WIKI.new_page(SPACE, type_page_name, type_page_content, schema_page_id)
-        type_page_id = WIKI.get_page_id(SPACE, type_page_name)
+        type_page_id = WIKI.new_page(
+            space_id, type_page_name, type_page_content, schema_page_id)
     return type_page_id
 
 
-def create_and_update_object_page(type_page_id, schema, object_type, object_name, dep_databases):
+def create_and_update_object_page(
+        type_page_id, schema, object_type, object_name, dep_databases):
     """First, create object page content.
     Second, check that object page exist.
     If page exists, update it.
@@ -190,12 +204,13 @@ def create_and_update_object_page(type_page_id, schema, object_type, object_name
     object_page_title = DB.database + '.' + schema + '.' + object_name
     object_page_content = create_object_page_content(
         schema, object_type, object_name, dep_databases)
-    object_page_id = WIKI.get_page_id(SPACE, object_page_title)
+
+    object_page_id = WIKI.get_page_id(space_id, object_page_title)
     if object_page_id:
         WIKI.update_page(object_page_id, object_page_title,
                          object_page_content, parent_id=type_page_id)
     else:
-        WIKI.new_page(SPACE, object_page_title,
+        WIKI.new_page(space_id, object_page_title,
                       object_page_content, parent_id=type_page_id)
 
 

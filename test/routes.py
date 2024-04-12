@@ -4,22 +4,22 @@ from base64 import b64decode
 
 from .conftest import TEST_DB_NAME
 
-TEST_URL = "http://localhost:10300/wiki/rest/api/content"
+TEST_URL = "http://localhost:10300/"
 
 AVAILABLE_USERS = [{"user": "test", "password": "Test123"},
                    {"user": "Salla", "password": "ALM Partners"}]
 
-AVAILABLE_PAGES = [{"spaceKey": "TEST", 'title': "test", "id": 1234, "version": 3},
-                   {"spaceKey": "TEST", 'title': "test2", "id": 666},
-                   {"spaceKey": "TEST", 'title': f"{TEST_DB_NAME}.store", "id": 1, "version": 3},
-                   {"spaceKey": "TEST", 'title': f"Tables {TEST_DB_NAME}.store", "id": 2, "version": 1},
-                   {"spaceKey": "TEST", 'title': f"{TEST_DB_NAME}.store.Clients", "id": 3, "version": 1},
-                   {"spaceKey": "TEST", 'title': f"{TEST_DB_NAME}.store.Products", "id": 4, "version": 1},
-                   {"spaceKey": "TEST", 'title': f"{TEST_DB_NAME}.report", "id": 5, "version": 3},
-                   {"spaceKey": "TEST", 'title': f"Tables {TEST_DB_NAME}.report", "id": 6, "version": 1},
-                   {"spaceKey": "TEST", 'title': f"{TEST_DB_NAME}.report.ProductWeekly", "id": 7, "version": 1},
-                   {"spaceKey": "TEST", 'title': f"Procedures {TEST_DB_NAME}.store", "id": 8, "version": 1},
-                   {"spaceKey": "TEST", 'title': f"{TEST_DB_NAME}.store.spSELECT", "id": 9, "version": 1}]
+AVAILABLE_PAGES = [{"space-id": "1", 'title': "test", "id": 1234, "version": 3},
+                   {"space-id": "1", 'title': "test2", "id": 666},
+                   {"space-id": "1", 'title': f"{TEST_DB_NAME}.store", "id": 1, "version": 3},
+                   {"space-id": "1", 'title': f"Tables {TEST_DB_NAME}.store", "id": 2, "version": 1},
+                   {"space-id": "1", 'title': f"{TEST_DB_NAME}.store.Clients", "id": 3, "version": 1},
+                   {"space-id": "1", 'title': f"{TEST_DB_NAME}.store.Products", "id": 4, "version": 1},
+                   {"space-id": "1", 'title': f"{TEST_DB_NAME}.report", "id": 5, "version": 3},
+                   {"space-id": "1", 'title': f"Tables {TEST_DB_NAME}.report", "id": 6, "version": 1},
+                   {"space-id": "1", 'title': f"{TEST_DB_NAME}.report.ProductWeekly", "id": 7, "version": 1},
+                   {"space-id": "1", 'title': f"Procedures {TEST_DB_NAME}.store", "id": 8, "version": 1},
+                   {"space-id": "1", 'title': f"{TEST_DB_NAME}.store.spSELECT", "id": 9, "version": 1}]
 
 
 def test_auth(request):
@@ -34,10 +34,10 @@ def test_auth(request):
 
 def get_page_version(request):
     path = request.get('path')
-    page_id = path.split('/')[-1]
+    page_id = path.split('/')[-2]
     for available in AVAILABLE_PAGES:
         if int(page_id) == available["id"] and available.get('version'):
-            return json.dumps({'version' : {'number': available["version"]}})
+            return json.dumps({'results' : [{'number': available["version"]}]})
     raise Exception('Page not found')    # status code 500
 
 def get_page_id(request):
@@ -52,24 +52,23 @@ def get_page_id(request):
 def post_content(request):
     """Body should be
     {
-        'type': 'page',
         'title': 'title',
-        'space': {'key': 'spake_key'},
-        'body': {'storage': {'value': 'value', 'representation': 'storage'}},
-        'ancestors': [{'id': parent_id}]    (optional)
+        'spaceId': space_id,
+        'body': {
+            'representation': 'storage',
+            'value': 'value'},
+        'parentId': parent_id    (optional)
     }
     """
     body = request["body"]
-    if not all(key in body for key in ('type', 'title', 'space', 'body')):
+    if not all(key in body for key in ('title', 'spaceId', 'body')):
         raise Exception('Missing keys from body')
-    if "key" not in body.get('space') and "storage" not in body.get('body'):
-        raise Exception('Missing keys from body')
-    if not all(key in body.get('body').get('storage') for key in ('value', 'representation')):
+    if not all(key in body.get('body') for key in ('value', 'representation')):
         raise Exception('Missing keys from body')
     for available in AVAILABLE_PAGES:
         if available['title'] == body.get('title'):
             raise Exception('Page already exists')
-    return json.dumps({"result": "OK"})
+    return json.dumps({"id": "69"})
 
 
 def put_content(request):
@@ -83,46 +82,44 @@ def put_content(request):
     }
     """
     body = request["body"]
-    if not all(key in body for key in ('type', 'title', 'body', 'version')):
+    if not all(key in body for key in ('id', 'status', 'title', 'body', 'version')):
         raise Exception('Missing keys from body')
-    if "storage" not in body.get('body') and "number" not in body.get('version'):
-        raise Exception('Missing keys from body')
-    if not all(key in body.get('body').get('storage') for key in ('value', 'representation')):
+    if not all(key in body.get('body') for key in ('value', 'representation')):
         raise Exception('Missing keys from body')
     return json.dumps({"result": "OK"})
 
 
 ROUTES = {
     "GET": {
-        "/wiki/rest/api/space": test_auth,
-        "/wiki/rest/api/content": get_page_id,
-        "/wiki/rest/api/content/1234": get_page_version,
-        "/wiki/rest/api/content/666": get_page_version,
-        "/wiki/rest/api/content/1": get_page_version,
-        "/wiki/rest/api/content/2": get_page_version,
-        "/wiki/rest/api/content/3": get_page_version,
-        "/wiki/rest/api/content/4": get_page_version,
-        "/wiki/rest/api/content/5": get_page_version,
-        "/wiki/rest/api/content/6": get_page_version,
-        "/wiki/rest/api/content/7": get_page_version,
-        "/wiki/rest/api/content/8": get_page_version,
-        "/wiki/rest/api/content/9": get_page_version
+        "/wiki/": test_auth,
+        "/wiki/api/v2/pages": get_page_id,
+        "/wiki/api/v2/pages/1234/versions": get_page_version,
+        "/wiki/api/v2/pages/666/versions": get_page_version,
+        "/wiki/api/v2/pages/1/versions": get_page_version,
+        "/wiki/api/v2/pages/2/versions": get_page_version,
+        "/wiki/api/v2/pages/3/versions": get_page_version,
+        "/wiki/api/v2/pages/4/versions": get_page_version,
+        "/wiki/api/v2/pages/5/versions": get_page_version,
+        "/wiki/api/v2/pages/6/versions": get_page_version,
+        "/wiki/api/v2/pages/7/versions": get_page_version,
+        "/wiki/api/v2/pages/8/versions": get_page_version,
+        "/wiki/api/v2/pages/9/versions": get_page_version
     },
     "POST": {
-        "/wiki/rest/api/content": post_content
+        "/wiki/api/v2/pages": post_content
     },
     "PUT": {
-        "/wiki/rest/api/content/1234": put_content,
-        "/wiki/rest/api/content/666": put_content,
-        "/wiki/rest/api/content/1": put_content,
-        "/wiki/rest/api/content/2": put_content,
-        "/wiki/rest/api/content/3": put_content,
-        "/wiki/rest/api/content/4": put_content,
-        "/wiki/rest/api/content/5": put_content,
-        "/wiki/rest/api/content/6": put_content,
-        "/wiki/rest/api/content/7": put_content,
-        "/wiki/rest/api/content/8": put_content,
-        "/wiki/rest/api/content/9": put_content
+        "/wiki/api/v2/pages/1234/": put_content,
+        "/wiki/api/v2/pages/666/": put_content,
+        "/wiki/api/v2/pages/1/": put_content,
+        "/wiki/api/v2/pages/2/": put_content,
+        "/wiki/api/v2/pages/3/": put_content,
+        "/wiki/api/v2/pages/4/": put_content,
+        "/wiki/api/v2/pages/5/": put_content,
+        "/wiki/api/v2/pages/6/": put_content,
+        "/wiki/api/v2/pages/7/": put_content,
+        "/wiki/api/v2/pages/8/": put_content,
+        "/wiki/api/v2/pages/9/": put_content
     }
 
 }

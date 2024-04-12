@@ -64,7 +64,7 @@ python -m palje confluence-url space server database
 
 | Argument  | Required | Description | Type | Default Value |
 | --- | --- | --- | --- | --- |
-| confluence-url | Yes | URL to Confluence REST content. In Confluence Cloud, this is something like https://yourconfluence.atlassian.net/wiki/rest/api/content | str |  |
+| confluence-url | Yes | The organisation's atlassian root page, https://<your-org>.atlassian.net/ | str |  |
 | space | Yes | Space key of the Confluence space, in which the documentation is created | str |  |
 | server | Yes | Host name of the SQL Server. Include port with comma | str |  |
 | database | Yes | Name of the database that is documented | str |  |
@@ -79,15 +79,15 @@ python -m palje confluence-url space server database
 ### Command
 ```
 cd .\palje
-python -m palje "https://yourconfluence.atlassian.net/wiki/rest/api/content" TEST "localhost,1433" MY_DB --schemas dbo store --dependent MY_OTHER_DB --authentication "SQL"
+python -m palje "https://<your-org>.atlassian.net/" TEST "localhost,1433" MY_DB --schemas dbo store --dependent MY_OTHER_DB --authentication "SQL"
 
 ```
 ### Output
 ```
 User for localhost,1433.MY_DB. If you wish to use Windows Authentication, hit enter: sa
 Password for user sa:
-Confluence user for yourconfluence.atlassian.net: example.user@youremail.com
-Password for user example.user@youremail.com:
+Confluence user for https://<your-org>.atlassian.net/: example.user@youremail.com
+Atlassian API token for user example.user@youremail.com:
 --------------------------
 Object dependencies are queried from the following databases: MY_DB, MY_OTHER_DB
 --------------------------
