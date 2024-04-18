@@ -1,16 +1,26 @@
-image: python:3.9
-
 options:
-  # Set maximum execution time for each step
-  max-time: 5
+    # Set maximum execution time for each step
+    max-time: 5
+
+definitons:
+    steps:
+        - step: &python-default
+            caches:
+                - pip
+            script:
+                - apt-get update
+                - apt-get -y install unixodbc-dev
+                - pip install tox
+                - tox
 
 pipelines:
   default:
-    - step:
-        caches:
-          - pip
-        script:
-          - apt-get update
-          - apt-get -y install unixodbc-dev
-          - pip install tox
-          - tox -e py39
+    - parallel:
+      - step:
+          <<: *python-default
+          name: "Python 3.11"
+          image: python:3.11
+      - step:
+          <<: *python-default
+          name: "Python 3.12" 
+          image: python:3.12
