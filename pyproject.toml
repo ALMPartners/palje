@@ -1,6 +1,50 @@
+[project]
+name = "palje"
+description = "A tool for creating hierarchical documentation of SQL Server databases to Confluence wiki."
+readme = "README.md"
+license = {file = "LICENSE"}
+keywords = ["palje"]
+dynamic = ["version"]
+dependencies = [
+    "sqlalchemy[mssql] ~= 2.0.29",
+    "requests ~= 2.31.0"
+]
+requires-python = ">=3.11"
+authors = [
+  {name = "ALM Partners Oy"}
+]
+maintainers = [
+  {name = "ALM Partners Oy"}
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Database",
+    "Topic :: Documentation",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12"
+]
+
+[project.urls]
+Repository = "https://github.com/ALMPartners/palje"
+
+[project.optional-dependencies]
+test = ["tox ~= 4.15"]
+
+[project.scripts]
+palje = "palje.__main__:main"
+
 [build-system]
-requires = ["setuptools >= 42", "wheel", "setuptools_scm[toml] >= 3.4"]
+requires = ["setuptools >= 61", "wheel", "setuptools_scm>=8.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
 
 [tool.setuptools_scm]
 write_to = "src/palje/version.py"
+
+[tool.pytest.ini_options]
+testpaths = [
+  "./test"
+]

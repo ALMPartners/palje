@@ -11,7 +11,7 @@ from .confluence_rest import ConfluenceREST
 from .mssql_database import MSSQLDatabase, DATABASE_OBJECT_TYPES
 
 
-def main(argv):
+def main(argv: list[str] | None = None):
     global WIKI, DB, SPACE, space_id
     # TODO: possibility to read params from config?
     (confluence_url, SPACE, parent_page, server, database,

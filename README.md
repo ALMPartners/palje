@@ -53,8 +53,16 @@ pip install [-e] .
     - Notice that the authentication works differently in Confluence Server
 
 ## CLI and arguments
+
+See online help for up-to-date documentation for available options.
 ```
-python -m palje confluence-url space server database
+palje -h
+```
+
+### Basic syntax
+
+```
+palje confluence-url space server database
                 --parent-page PARENT_PAGE
                 --schemas SCHEMAS [SCHEMAS ...]
                 --dependent DEPENDENT [DEPENDENT ...]
@@ -78,7 +86,10 @@ python -m palje confluence-url space server database
 ## Usage example
 ### Command
 ```
-cd .\palje
+# Run via a configured script endpoint ("palje.exe")
+palje "https://<your-org>.atlassian.net/" TEST "localhost,1433" MY_DB --schemas dbo store --dependent MY_OTHER_DB --authentication "SQL"
+
+# Optionally you also run palje as a Python library module
 python -m palje "https://<your-org>.atlassian.net/" TEST "localhost,1433" MY_DB --schemas dbo store --dependent MY_OTHER_DB --authentication "SQL"
 
 ```
@@ -134,7 +145,7 @@ Notice that if you delete objects from database, Palje won't delete the correspo
 
 Run tests with [tox](https://pypi.org/project/tox/) 
 ```
-pip install tox
+pip install tox # OR install as an optional depencency with palje itself: pip install .[test]
 
 tox -- --mssql_host MSSQL_HOST --mssql_port MSSQL_PORT --mssql_username MSSQL_USER --mssql_password MSSQL_PASSWORD --mssql_driver MSSQL_DRIVER
 
