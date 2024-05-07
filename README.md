@@ -164,6 +164,44 @@ pytest
 
 Notice that tests have dependencies to packages [ahjo](https://pypi.org/project/ahjo/) and [SQL Alchemy](https://pypi.org/project/SQLAlchemy/). To succesfully run SQL Server tests, you must have permissions to create a new database in instance.
 
+## MSI installers
+
+Palje can be packaged into an MSI installer which can be used to install it into a Windows environment and easily update it later. Installers are self-contained, meaning that the package contains everything that is needed for running Palje (e.g. required parts of Python installation and all the 3rd party libraries and their dependencies are included).
+
+### Types of MSI installers
+
+There two types of installers, `user` and `system`. The `user` installer is suitable for single-user installations e.g. for a user who wants to run palje on their own workstation. For shared use, e.g. Azure Virtual Desktop, the `system` installer may be the better option: once installed, the tools are available for all users on that machine.
+
+**Notice:** using the `system` installer requires administrator priviledges.
+
+### Local MSI builds
+
+**Notice:** using an unsigned installer can end up with Windows Defender blocking Palje as malware. There is an ALM Partners developer signing key available to overcome this problem. Ask team TA3 for help if you need to sign development MSIs for testing purposes.
+
+To set up an environment for MSI builds, create a new venv, activate it, and install build dependencies.
+
+```
+python venv <name-of-venv>
+./<name-of-venv>/Scripts/activate
+pip install .[msibuild]
+```
+
+To build a `user` installer, use commands:
+
+```
+$env:PALJE_MSI_TARGET_TYPE="user"
+python ./msi_build.py bdist_msi
+```
+
+To build a `system` installer, use commands:
+
+```
+$env:PALJE_MSI_TARGET_TYPE="system"
+python ./msi_build.py bdist_msi
+```
+
+**Notice:** if you make changes to the code, you __must re-install the palje__ package (`pip install .` or `pip install .[msibuild]`) into the build venv for the changes to be included in the next MSI build. Editable installs don't work here, so don't use them!
+
 # License
 Copyright 2021 ALM Partners Oy
 

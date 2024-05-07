@@ -31,6 +31,7 @@ Repository = "https://github.com/ALMPartners/palje"
 
 [project.optional-dependencies]
 test = ["tox ~= 4.15"]
+msibuild = ["cx_freeze ~= 7.0.0"]
 
 [project.scripts]
 palje = "palje.__main__:main"

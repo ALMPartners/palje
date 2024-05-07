@@ -6,9 +6,9 @@
 import sys
 from argparse import ArgumentParser
 
-from . import storage_format
-from .confluence_rest import ConfluenceREST
-from .mssql_database import MSSQLDatabase, DATABASE_OBJECT_TYPES
+from palje import storage_format
+from palje.confluence_rest import ConfluenceREST
+from palje.mssql_database import MSSQLDatabase, DATABASE_OBJECT_TYPES
 
 
 def main(argv: list[str] | None = None):
