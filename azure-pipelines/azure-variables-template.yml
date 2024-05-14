@@ -1,0 +1,3 @@
+variables:
+  - group: VG-CodeSign
+  - group: VG-PaljeBuild

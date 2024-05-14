@@ -1,0 +1,28 @@
+# Only trigger pipeline when a merge happens to master branch
+trigger:
+  tags:
+    include:
+    - '*'
+  branches:
+    exclude:
+    - '*'
+
+# Do not trigger on any pull requests
+pr: none
+
+# Fetch variables from Azure DevOps variable-group via a YAML-file
+variables:
+  - template: azure-pipelines/azure-variables-template.yml
+
+# List of jobs for the pipeline to execute
+jobs:
+  - job: Build # System name for job
+    displayName: Build artifacts # Display name for job
+    pool: # Which DevOps Agent the job uses, for msi-builds windows OS is required. If access to ALMP Azure resources is needed, the pool must be self-hosted
+      name: Azure Pipelines # Pool name
+      vmImage: 'windows-latest' # virtual machine image/OS
+    timeoutInMinutes: 30 # Timeout
+    steps: # What steps the job includes. These are fetched from a job-template-file or can be defined on to the main file here (not recommended)
+    - template: 'azure-pipelines/azure-build-template.yml' # Path to template file
+      parameters: # Parameters the job needs
+        pythonVersion: $(pythonVersion)
