@@ -19,6 +19,11 @@ def main(argv: list[str] | None = None):
     # ============ DATABASE CONNECTION ============
     DB = MSSQLDatabase(server, database, driver, authentication)
     DB.connect()
+    databases = DB.get_databases()
+    if DB.database not in databases:
+        # This happens if the database name has different case than in sys.databases
+        # Find the correct spelling and update the database name
+        DB.database = [db for db in databases if db.lower() == DB.database.lower()][0]
     # =========== CONFLUENCE CONNECTION ===========
     WIKI = ConfluenceREST(confluence_url)
     WIKI.verify_credentials()
@@ -29,7 +34,8 @@ def main(argv: list[str] | None = None):
     # ============ SCHEMAS TO DOCUMENT ============
     schemas = collect_schemas_to_document(schema_filter)
     # ==== DATABASES WHERE TO SEEK DEPENDENCIES ===
-    dep_databases = collect_databases_to_query_dependencies(database_filter)
+
+    dep_databases = collect_databases_to_query_dependencies(database_filter, databases)
     print("--------------------------")
     print(f"Object dependencies are queried from the following databases: " +
           f"{', '.join(dep_databases)}")
@@ -97,12 +103,11 @@ def collect_schemas_to_document(schema_filter):
     return schemas
 
 
-def collect_databases_to_query_dependencies(database_filter):
+def collect_databases_to_query_dependencies(database_filter, server_databases):
     """If dependent databases not given,
     track dependencies only inside documented database.
     """
     if database_filter:
-        server_databases = DB.get_databases()
         database_filter.append(DB.database)  # add current database to filter
         dep_databases = [d for d in database_filter if d in server_databases]
         return list(set(dep_databases))
