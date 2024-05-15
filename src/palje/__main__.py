@@ -22,8 +22,9 @@ def main(argv: list[str] | None = None):
     databases = DB.get_databases()
     if DB.database not in databases:
         # This happens if the database name has different case than in sys.databases
-        # Find the correct spelling and update the database name
-        DB.database = [db for db in databases if db.lower() == DB.database.lower()][0]
+        # Find the assumed correct name and show error message to the user
+        print(f"Database '{DB.database}' was not found on the server. Did you mean '{[db for db in databases if db.lower() == DB.database.lower()][0]}'?")
+        quit()
     # =========== CONFLUENCE CONNECTION ===========
     WIKI = ConfluenceREST(confluence_url)
     WIKI.verify_credentials()
