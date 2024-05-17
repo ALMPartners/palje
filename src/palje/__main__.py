@@ -59,7 +59,7 @@ def parse_arguments(args):
     parser = ArgumentParser(
         description='A tool for creating hierarchical documentation of SQL Server databases to Confluence wiki.')
     parser.add_argument('confluence-url',
-                        help='URL to Confluence REST content. In Confluence Cloud, this is something like https://yourconfluence.atlassian.net/wiki/rest/api/content.')
+                        help='URL to Confluence REST content. In Confluence Cloud, this is something like https://<your-org>.atlassian.net/.')
     parser.add_argument('space',
                         help='Space key of the Confluence space, in which the documentation is created.')
     parser.add_argument('--parent-page',
