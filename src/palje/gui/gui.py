@@ -1,6 +1,9 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
+from pathlib import Path
+import sys
+import os
 
 from palje.__main__ import (
     collect_databases_to_query_dependencies,
@@ -25,12 +28,17 @@ WINDOW_TITLE = f"Palje v{PALJE_VERSION}"
 DEFAULT_WINDOW_SIZE = (430, 710)
 WINDOW_PADDING = 5
 FRAME_PADDING = 7
+ICON = Path(__file__).parent / "palje.png"
+if not ICON.exists():
+    # When running the built version installed from the .msi
+    ICON = Path(sys.executable).parent / "palje.png"
 
 
 class App(tk.Tk):
     def __init__(self, start_size: tuple[int, int] = DEFAULT_WINDOW_SIZE):
         super().__init__()
         self.title(WINDOW_TITLE)
+        self.iconphoto(True, tk.PhotoImage(file=ICON))
         self.geometry(f"{start_size[0]}x{start_size[1]}")
         self.configure(padx=WINDOW_PADDING, pady=WINDOW_PADDING)
         Main(self).pack(fill=tk.BOTH, expand=True)
