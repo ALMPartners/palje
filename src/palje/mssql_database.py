@@ -4,7 +4,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Module for querying data from MSSQL database."""
-import getpass
 import struct
 import pyodbc
 import importlib
@@ -21,15 +20,28 @@ DATABASE_OBJECT_TYPES = {
 }
 SQL_COPT_SS_ACCESS_TOKEN = 1256  # This connection option is defined by microsoft in msodbcsql.h
 
+# TODO: exception handling (wrap into custom exceptions)
+# TODO: use logging instead of print
 
 class MSSQLDatabase():
-    def __init__(self, server, database, driver, authentication):
+    def __init__(self, server, database, driver, authentication, port: int = 1433, username: str | None = None, password: str | None = None):
         self.server = server
         self.database = database
         self.driver = driver
         self.authentication = authentication
         self.connection = None
         self.queries = self._read_queries_from_ini()
+        self.username = username
+        self.password = password
+        self.port = port
+
+    @staticmethod
+    def available_db_drivers() -> list[str]:
+        """Return a list of available SQL Server drivers available to pyodbc."""
+        all_drivers = pyodbc.drivers()
+        applicable_drivers = list(filter(lambda driver_name: 'SQL Server' in driver_name, all_drivers))
+        applicable_drivers.sort()
+        return applicable_drivers
 
     @staticmethod
     def _read_queries_from_ini():
@@ -39,21 +51,6 @@ class MSSQLDatabase():
         config.read(config_file)
         return config['Queries']
 
-    def connect(self):
-        connection_str = self._ask_credentials()
-        try:
-            if self.authentication.lower() == "azureidentity":
-                self.connection = pyodbc.connect(
-                    connection_str,
-                    attrs_before={SQL_COPT_SS_ACCESS_TOKEN: self.get_az_token()}
-                )
-            else:
-                self.connection = pyodbc.connect(connection_str)
-        except:
-            print(
-                f'Failed to connect to {self.server}.{self.database}. Check your server details, username and password.')
-            raise
-
     def close(self):
         try:
             self.connection.close()
@@ -61,20 +58,47 @@ class MSSQLDatabase():
             print(
                 'Failed to close the database connection. Most likely because the connection is already closed.')
 
-    def _ask_credentials(self):
-        conn_str = f'DRIVER={{{self.driver}}};SERVER={self.server};DATABASE={self.database}'
+    def connect(self):
+        try:
+            if self.authentication.lower() == "azureidentity":
+                self.connection = pyodbc.connect(
+                    self.connection_string,
+                    attrs_before={SQL_COPT_SS_ACCESS_TOKEN: self.get_az_token()}
+                )
+            else:
+                self.connection = pyodbc.connect(self.connection_string)
+        except:
+            print(
+                f'Failed to connect to {self.server}.{self.database}. Check your server details, username and password.')
+            raise
+
+    def change_current_db(self, db_name: str):
+        if self.connection is None:
+            self.connect()
+        cursor = self.connection.cursor()
+        try:
+            # TODO: sanitize db_name? 
+            # Apparently default sanitization (?, db_name) is not supported for this kind of query.
+            cursor.execute(f"USE {db_name}")
+            self.database = db_name
+        except pyodbc.Error as ex:
+            print(f'Failed to change database to {db_name}')
+            raise ex
+
+    @property
+    def connection_string(self) -> str:
+        conn_str = f'DRIVER={{{self.driver}}};SERVER={self.server}'
+        if self.port:
+            conn_str = f'{conn_str},{self.port}'
+        if self.database:
+            conn_str = f'{conn_str};DATABASE={self.database}'
         if self.authentication == 'SQL':
-            uid = input(
-                f'User for {self.server}.{self.database}. If you wish to use Windows Authentication, hit enter: ')
-            if uid:
-                pwd = getpass.getpass(f'Password for user {uid}: ')
-                conn_str = f'{conn_str};UID={uid};PWD={pwd}'
-            else: 
-                conn_str = f'{conn_str};Trusted_Connection=yes;'
+            conn_str = f'{conn_str};UID={self.username};PWD={self.password}'
         elif self.authentication == 'Windows':
             conn_str = f'{conn_str};Trusted_Connection=yes;'
         elif self.authentication == 'AAD':
             conn_str = f'{conn_str};Authentication=ActiveDirectoryInteractive;'
+
         return conn_str
 
     def get_az_token(self):

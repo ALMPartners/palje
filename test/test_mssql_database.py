@@ -1,7 +1,8 @@
 import pyodbc
+from palje.mssql_database import MSSQLDatabase
 import pytest
 
-from .conftest import TEST_DB_NAME
+from test.conftest import TEST_DB_NAME
 
 
 def test_sql_queries_should_be_read_succesfully(mssql_db):
@@ -25,17 +26,21 @@ def test_sql_queries_should_be_read_succesfully(mssql_db):
     assert 'object_dependencies' in queries
 
 
-def test_when_using_sql_auth_ask_credentials_should_return_connection_str_with_uid_and_pw(mssql_db, mssql_config, monkeypatch):
-    monkeypatch.setattr('builtins.input', lambda x: 'user')
-    monkeypatch.setattr('getpass.getpass', lambda x: 'password')
-    connection_str = mssql_db._ask_credentials()
-    assert connection_str == f'DRIVER={{{mssql_config[2]}}};SERVER={mssql_config[0]};DATABASE={mssql_config[1]};UID=user;PWD=password'
+def test_when_using_sql_auth_ask_credentials_should_return_connection_str_with_uid_and_pw(mssql_db: MSSQLDatabase, mssql_config: dict[str, str | int]):
+    expected = f'DRIVER={{{mssql_config["driver"]}}};SERVER={mssql_config["server"]},{mssql_config["port"]};DATABASE={mssql_config["database"]};UID={mssql_config["username"]};PWD={mssql_config["password"]}'
+    assert mssql_db.connection_string == expected
 
 
-def test_when_using_win_auth_ask_credentials_should_return_connection_str_with_trusted_connection(mssql_db, mssql_config, monkeypatch):
-    monkeypatch.setattr('builtins.input', lambda x: '')
-    connection_str = mssql_db._ask_credentials()
-    assert connection_str == f'DRIVER={{{mssql_config[2]}}};SERVER={mssql_config[0]};DATABASE={mssql_config[1]};Trusted_Connection=yes;'
+def test_when_using_win_auth_ask_credentials_should_return_connection_str_with_trusted_connection() -> None: #mssql_db: MSSQLDatabase, mssql_config: dict[str, str | int]):
+    server = "localhost"
+    port = 1433
+    database = "PALJE_TEST"
+    driver = "ODBC Driver 17 for SQL Server"
+    authentication = "Windows"
+    db_client = MSSQLDatabase(server=server, port=port, database=database, driver=driver, authentication=authentication)
+    excpeted = f'DRIVER={{{driver}}};SERVER={server},{port};DATABASE={database};Trusted_Connection=yes;'
+    actual = db_client.connection_string
+    assert actual == excpeted
 
 
 @pytest.mark.mssql

@@ -1,29 +1,24 @@
 import pytest
-from palje.confluence_rest import ConfluenceREST
+from palje.confluence_rest import ConfluenceREST, ConfluenceRESTError
 
-from .routes import AVAILABLE_PAGES, AVAILABLE_USERS, TEST_URL
-
+from test.routes import AVAILABLE_PAGES, AVAILABLE_USERS, TEST_URL
 
 @pytest.mark.http_server
 class TestWithHTTPServer():
 
     @pytest.fixture(scope='function', autouse=True)
     def confluence_rest_init(self):
-        self.wiki = ConfluenceREST(TEST_URL)
+        self.wiki = ConfluenceREST(atlassian_url=TEST_URL)
         yield
 
     @pytest.mark.parametrize("credentials", AVAILABLE_USERS)
-    def test_login_should_succeed_for_available_user(self, monkeypatch, credentials):
-        monkeypatch.setattr('builtins.input', lambda x: credentials['user'])
-        monkeypatch.setattr('getpass.getpass', lambda x: credentials['password'])
-        self.wiki.verify_credentials()
+    def test_login_should_succeed_for_available_user(self, credentials):
+        self.wiki.test_confluence_access(confluence_user_id=credentials['user'], confluence_api_token=credentials['password'], space_key='TEST')
 
-    def test_login_should_fail_for_unavailable_user(self, monkeypatch):
+    def test_login_should_fail_for_unavailable_user(self):
         credentials = {'user': 'Salla', 'password': 'tyhja'}
-        monkeypatch.setattr('builtins.input', lambda x: credentials['user'])
-        monkeypatch.setattr('getpass.getpass', lambda x: credentials['password'])
-        with pytest.raises(SystemExit):
-            self.wiki.verify_credentials()
+        with pytest.raises(ConfluenceRESTError) as e:
+            self.wiki.test_confluence_access(confluence_user_id=credentials['user'], confluence_api_token=credentials['password'], space_key='TEST')
 
     @pytest.mark.parametrize("page", AVAILABLE_PAGES[:2])
     def test_id_should_be_returned_for_available_page(self, page):

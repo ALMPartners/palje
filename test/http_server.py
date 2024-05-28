@@ -3,7 +3,7 @@ import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
-from .routes import ROUTES
+from test.routes import ROUTES
 
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -42,7 +42,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             response = ROUTES[self.command][path](request)
             self._set_headers()
             self.wfile.write(bytes(response, 'utf-8'))
-        except:
+        except Exception as err:
             self.send_error(500)
 
     def do_POST(self):

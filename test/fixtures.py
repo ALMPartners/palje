@@ -11,25 +11,25 @@ from sqlalchemy.exc import SAWarning
 from sqlalchemy.schema import CreateSchema
 from sqlalchemy import text
 
-from .conftest import TEST_DB_NAME, engine_from
-from .database.models import Base
-from .http_server import RequestHandler
+from test.conftest import TEST_DB_NAME, engine_from
+from test.database.models import Base
+from test.http_server import RequestHandler
 
 
 @pytest.fixture(scope='session')
 def mssql_config(request):
-    mssql_host = request.config.getoption('mssql_host')
-    if mssql_host:
-        server = mssql_host + ',' + request.config.getoption('mssql_port')
-    else:
-        server = ''
     authentication = 'SQL'
-    return (server, TEST_DB_NAME, request.config.getoption('mssql_driver'), authentication)
+    server = request.config.getoption('mssql_host')
+    driver = request.config.getoption('mssql_driver')
+    username = request.config.getoption('mssql_username')
+    password = request.config.getoption('mssql_password')
+    port = request.config.getoption('mssql_port')
+    return {"server": server, "port": port, "database": TEST_DB_NAME, "driver": driver, "authentication": authentication, "username": username, "password": password}
 
 
 @pytest.fixture(scope='function')
 def mssql_db(mssql_config):
-    return MSSQLDatabase(*mssql_config)
+    return MSSQLDatabase(**mssql_config)
 
 
 @pytest.fixture(scope='session')

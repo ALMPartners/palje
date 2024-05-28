@@ -2,7 +2,7 @@
 import json
 from base64 import b64decode
 
-from .conftest import TEST_DB_NAME
+from test.conftest import TEST_DB_NAME
 
 TEST_URL = "http://localhost:10300/"
 
@@ -47,7 +47,6 @@ def get_page_id(request):
         if all(item in available.items() for item in query_params.items()):
             return json.dumps({"results": [{"id": available["id"]}]})
     return json.dumps({"results": []})    # no page found
-
 
 def post_content(request):
     """Body should be
@@ -103,7 +102,8 @@ ROUTES = {
         "/wiki/api/v2/pages/6/versions": get_page_version,
         "/wiki/api/v2/pages/7/versions": get_page_version,
         "/wiki/api/v2/pages/8/versions": get_page_version,
-        "/wiki/api/v2/pages/9/versions": get_page_version
+        "/wiki/api/v2/pages/9/versions": get_page_version,
+        "/wiki/api/v2/spaces": test_auth
     },
     "POST": {
         "/wiki/api/v2/pages": post_content

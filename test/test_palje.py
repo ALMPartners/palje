@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 import pytest
 from palje.__main__ import main
 
-from .routes import AVAILABLE_USERS, TEST_URL, TEST_DB_NAME
+from test.routes import AVAILABLE_USERS, TEST_URL, TEST_DB_NAME
 
 
 @pytest.mark.mssql

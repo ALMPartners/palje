@@ -35,6 +35,7 @@ msibuild = ["cx_freeze ~= 7.0.0"]
 
 [project.scripts]
 palje = "palje.__main__:main"
+palje-gui = "palje.gui.gui:main"
 
 [build-system]
 requires = ["setuptools >= 61", "wheel", "setuptools_scm>=8.0"]

@@ -28,6 +28,8 @@ pip install [-e] .
 
 # Usage
 
+Palje can be used either from the command line (CLI) or from the graphical user interface (GUI).
+
 ## Prerequisites
 
 - Read access to the MSSQL database you wish to document
@@ -51,6 +53,20 @@ pip install [-e] .
 - Palje has been tested to work with Confluence Cloud
     - There is a possibility that Palje works with Confluence Server since the Server REST API is similar to Cloud REST API
     - Notice that the authentication works differently in Confluence Server
+
+## Graphical user-interface
+
+Notice that GUI may be lacking some of the more advanced features that are available via CLI.
+
+![Page hierarchy in Confluence](./images/palje_gui.PNG?raw=true)
+
+Launch Palje GUI from a shell with command:
+
+```
+palje-gui
+```
+
+See the CLI documentation below for information on various parameters - it all applies to GUI, too.
 
 ## CLI and arguments
 
@@ -84,7 +100,9 @@ palje confluence-url space server database
  
 
 ## Usage example
-### Command
+
+
+### Command-line interface
 ```
 # Run via a configured script endpoint ("palje.exe")
 palje "https://<your-org>.atlassian.net/" TEST "localhost,1433" MY_DB --schemas dbo store --dependent MY_OTHER_DB --authentication "SQL"
