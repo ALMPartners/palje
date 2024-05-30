@@ -1,6 +1,7 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.engine.url import URL
+from sqlalchemy.sql import text
 
 TEST_DB_NAME = 'PALJE_TEST'
 
@@ -90,11 +91,11 @@ def ensure_mssql_ready_for_tests(config):
             raise Exception('MSSQL Server not given')
         engine = engine_from(config)
         with engine.connect() as connection:
-            query = "SELECT name FROM sys.databases WHERE UPPER(name) = ?"
-            result = connection.execute(query, (TEST_DB_NAME, ))
-            if result.fetchall():
-                raise Exception(
-                    f"There already exists a database with name '{TEST_DB_NAME}'")
+            connection.execution_options(isolation_level="AUTOCOMMIT")
+            query = text("SELECT name FROM sys.databases WHERE UPPER(name) = :name")
+            result = connection.execute(query, {'name': TEST_DB_NAME})
+        if result.fetchall():
+            connection.execute(text(f'DROP DATABASE {TEST_DB_NAME}'))
         return True
     except:
         return False

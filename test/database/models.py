@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Date, Integer, MetaData, Numeric, String
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 
 meta = MetaData(naming_convention={
     "ix": "ix_%(column_0_label)s",

@@ -38,9 +38,7 @@ def mssql_credentials(request):
 
 
 @pytest.fixture(scope='function')
-def connected_db(mssql_db, mssql_credentials, monkeypatch):
-    monkeypatch.setattr('builtins.input', lambda x: mssql_credentials[0])
-    monkeypatch.setattr('getpass.getpass', lambda x: mssql_credentials[1])
+def connected_db(mssql_db):
     mssql_db.connect()
     return mssql_db
 
@@ -71,31 +69,34 @@ def mssql_setup_and_teardown(request):
         master_engine = engine_from(request.config)
         with master_engine.connect() as connection:
             connection.execution_options(isolation_level="AUTOCOMMIT")
-            connection.execute(f'CREATE DATABASE {TEST_DB_NAME}')
+            connection.execute(text(f'CREATE DATABASE {TEST_DB_NAME}'))
     # create schema and tables
     engine = engine_from(request.config, database=TEST_DB_NAME)
     with engine.connect() as connection:
         connection.execute(CreateSchema('store'))
         connection.execute(CreateSchema('report'))
-        Base.metadata.create_all(engine)
+        connection.commit()
+    Base.metadata.create_all(engine)
+
+    with engine.connect() as connection:
         with database_cwd():
-            # create index and procedure
+            # Create index and procedure
             create_index = open('index.sql', 'r', encoding='utf-8').read()
             connection.execute(text(create_index))
             create_procedure = open('procedure.sql', 'r', encoding='utf-8').read()
             connection.execute(text(create_procedure))
-            # add extended properties with ahjo
+            connection.commit()
+            # Add extended properties with Ahjo
             ahjo.update_db_object_properties(engine, ['store', 'report'])
     engine.dispose()
     yield
-    # drop database
     with master_engine.connect() as connection:
         connection.execution_options(isolation_level="AUTOCOMMIT")
         result = connection.execute(
-            'SELECT session_id FROM sys.dm_exec_sessions WHERE database_id = DB_ID(?)', (TEST_DB_NAME,))
+            text(f"SELECT session_id FROM sys.dm_exec_sessions WHERE database_id = DB_ID('{TEST_DB_NAME}')"))
         for row in result.fetchall():
-            connection.execute(f'KILL {row.session_id}')
-        connection.execute(f'DROP DATABASE {TEST_DB_NAME}')
+            connection.execute(text(f'KILL {row.session_id}'))
+        connection.execute(text(f'DROP DATABASE {TEST_DB_NAME}'))
 
 
 @pytest.fixture(autouse=True, scope='session')

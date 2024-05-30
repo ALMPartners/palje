@@ -46,14 +46,12 @@ def test_when_using_win_auth_ask_credentials_should_return_connection_str_with_t
 @pytest.mark.mssql
 class TestWithSQLServer():
 
-    def test_connect_should_fail_with_invalid_credentials(self, mssql_db, monkeypatch):
-        monkeypatch.setattr('builtins.input', lambda x: '')
+    def test_connect_should_fail_with_invalid_credentials(self, mssql_db):
+        mssql_db.password = 'wrong_password'
         with pytest.raises(pyodbc.InterfaceError):
             mssql_db.connect()
 
-    def test_connect_should_succeed_with_valid_credentials(self, mssql_db, mssql_credentials, monkeypatch):
-        monkeypatch.setattr('builtins.input', lambda x: mssql_credentials[0])
-        monkeypatch.setattr('getpass.getpass', lambda x: mssql_credentials[1])
+    def test_connect_should_succeed_with_valid_credentials(self, mssql_db):
         mssql_db.connect()
 
     def test_close_should_succeed_with_open_connection(self, connected_db):
