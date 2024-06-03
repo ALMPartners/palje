@@ -12,6 +12,10 @@ definitons:
                 - apt-get -y install unixodbc-dev
                 - pip install tox
                 - tox
+                - pip install .
+                - pip freeze > requirements.txt
+                - pip install safety
+                - safety --stage cicd --key $PYUP_API_KEY scan
 
 pipelines:
   default:
