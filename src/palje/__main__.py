@@ -113,8 +113,9 @@ def main(argv: list[str] | None = None):
     )
     print("--------------------------")
     # ================= ROOT PAGE =================
+    p = parent_page if parent_page else database_client.database
     root_page_id = create_or_update_root_page(
-        database_client, confluence_client, space_id, parent_page
+        database_client, confluence_client, space_id, page_name=p
     )
     # ================ OTHER PAGES ================
     create_or_update_subpages(
@@ -126,10 +127,12 @@ def main(argv: list[str] | None = None):
         root_page_id,
     )
 
-
 def create_or_update_subpages(
     database_client, confluence_client, space_id, schemas, dep_databases, root_page_id
 ):
+    object_dependencies = database_client.get_object_dependencies(
+        dep_databases
+    )
     for schema in schemas:
         schema_page_id = create_and_update_schema_page(
             database_client, confluence_client, space_id, root_page_id, schema
@@ -153,7 +156,7 @@ def create_or_update_subpages(
                     schema,
                     object_type,
                     object_name,
-                    dep_databases,
+                    object_dependencies,
                 )
 
 
@@ -356,7 +359,7 @@ def create_and_update_object_page(
     schema,
     object_type,
     object_name,
-    dep_databases,
+    object_dependencies,
 ):
     """First, create object page content.
     Second, check that object page exist.
@@ -365,7 +368,7 @@ def create_and_update_object_page(
     """
     object_page_title = database_client.database + "." + schema + "." + object_name
     object_page_content = create_object_page_content(
-        database_client, schema, object_type, object_name, dep_databases
+        database_client, schema, object_type, object_name, object_dependencies
     )
 
     object_page_id = confluence_client.get_page_id(space_id, object_page_title)
@@ -383,7 +386,7 @@ def create_and_update_object_page(
 
 
 def create_object_page_content(
-    database_client: MSSQLDatabase, schema, object_type, object_name, dep_databases
+    database_client: MSSQLDatabase, schema, object_type, object_name, object_dependencies
 ):
     """Object page consists of
     - Header with object description
@@ -393,7 +396,7 @@ def create_object_page_content(
         - extended properties
     - For tables and views, HTML table listing indexes
     - For procedures and functions, HTML table listing routine parameters
-    - HTML table listing object dependencies in dep_databases
+    - HTML table listing object dependencies
     """
     description = database_client.get_object_description(schema, object_name)
     object_page_content = storage_format.description_header(description)
@@ -407,10 +410,13 @@ def create_object_page_content(
     elif object_type in ["Procedures", "Functions"]:
         object_parameters = database_client.get_object_parameters(schema, object_name)
         object_page_content += storage_format.parameter_table(object_parameters)
-    object_dependencies = database_client.get_object_dependencies(
-        schema, object_name, dep_databases
-    )
-    object_page_content += storage_format.dependencies_table(object_dependencies)
+    o = []
+    for d in object_dependencies:
+        if d["source"]["Object"] == object_name and d["source"]["Schema"] == schema:
+            o.append(d["target"])
+        elif d["target"]["Object"] == object_name and d["target"]["Schema"] == schema:
+            o.append(d["source"])
+    object_page_content += storage_format.dependencies_table(o)
     return object_page_content
 
 

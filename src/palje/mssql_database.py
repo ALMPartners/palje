@@ -257,24 +257,18 @@ class MSSQLDatabase():
         finally:
             cursor.close()
 
-    def get_object_dependencies(self, schema, object_name, dep_databases):
-        """Return list of dicts of dependent objects."""
+    def get_object_dependencies(self, dep_databases):
+        """Return list of dicts of all dependencies between objects in given databases."""
         cursor = self.connection.cursor()
         try:
-            object_name = f'{self.database}.{schema}.{object_name}'
             headers = ['Database', 'Schema', 'Object']
             result = []
             if not isinstance(dep_databases, list):    # make sure its list
                 dep_databases = [dep_databases]
             for database in dep_databases:
-                cursor.execute(self.queries['object_dependencies'].format(database),
-                               (object_name, object_name))
-                # pick either source or target object
+                cursor.execute(self.queries['object_dependencies'].format(database))
                 for row in cursor.fetchall():
-                    if row.target == object_name:
-                        result.append(dict(zip(headers, row.source.split('.'))))    # pick source
-                    else:
-                        result.append(dict(zip(headers, row.target.split('.'))))    # pick target
+                    result.append({"target": dict(zip(headers, row.target.split('.'))), "source": dict(zip(headers, row.source.split('.')))})
             return result
         finally:
             cursor.close()
