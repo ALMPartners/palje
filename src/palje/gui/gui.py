@@ -1,31 +1,34 @@
+import argparse
+import asyncio
+import threading
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
 from pathlib import Path
 import sys
-import os
 
-from palje.__main__ import (
-    collect_databases_to_query_dependencies,
-    collect_schemas_to_document,
-    create_or_update_root_page,
-    create_or_update_subpages,
+from palje.confluence.confluence_rest import (
+    ConfluenceRestClientAsync,
+    ConfluenceRESTError,
 )
-from palje.confluence_rest import ConfluenceREST, ConfluenceRESTError
 from palje.gui.components.confluence_connection_widget import ConfluenceConnectionWidget
 from palje.gui.components.db_browser_widget import DbBrowserWidget
 from palje.gui.components.db_server_widget import (
     DBServerConnectionState,
     DbServerWidget,
 )
-from palje.mssql_database import MSSQLDatabase as MSSQLDatabase
+from palje.mssql.mssql_database import MSSQLDatabase as MSSQLDatabase
+from palje.db_to_confluence import (
+    DEFAULT_CONCURRENCY_LIMIT,
+    document_db_to_confluence_async,
+)
+from palje.progress_tracker import ProgressTracker
 from palje.version import __version__ as PALJE_VERSION
 
-# TODO: progress indicator
 # TODO: dependent databases selection
 
 WINDOW_TITLE = f"Palje v{PALJE_VERSION}"
-DEFAULT_WINDOW_SIZE = (430, 710)
+DEFAULT_WINDOW_SIZE = (430, 720)
 WINDOW_PADDING = 5
 FRAME_PADDING = 7
 ICON = Path(__file__).parent / "palje.png"
@@ -35,26 +38,47 @@ if not ICON.exists():
 
 
 class App(tk.Tk):
-    def __init__(self, start_size: tuple[int, int] = DEFAULT_WINDOW_SIZE):
+    def __init__(
+        self,
+        start_size: tuple[int, int] = DEFAULT_WINDOW_SIZE,
+        max_concurrency: int = DEFAULT_CONCURRENCY_LIMIT,
+    ):
         super().__init__()
-        self.title(WINDOW_TITLE)
+        self.title(
+            WINDOW_TITLE
+            + (
+                f" (MC: {max_concurrency})"
+                if max_concurrency != DEFAULT_CONCURRENCY_LIMIT
+                else ""
+            )
+        )
         self.iconphoto(True, tk.PhotoImage(file=ICON))
         self.geometry(f"{start_size[0]}x{start_size[1]}")
         self.configure(padx=WINDOW_PADDING, pady=WINDOW_PADDING)
-        Main(self).pack(fill=tk.BOTH, expand=True)
+        Main(parent=self, max_concurrency=max_concurrency).pack(
+            fill=tk.BOTH, expand=True
+        )
 
         self.mainloop()
 
 
 class Main(ttk.Frame):
-
     _mssql_database: MSSQLDatabase | None
     _db_server_widget: DbServerWidget
     _db_browser_widget: DbBrowserWidget
 
-    def __init__(self, parent: tk.Misc | None = None):
+    _progress_tracker: ProgressTracker
+    _progressbar: ttk.Progressbar
+    _progressbar_var: tk.DoubleVar
+
+    _max_concurrency: int
+
+    def __init__(self, parent: tk.Misc | None = None, max_concurrency: int = 2):
         super().__init__(master=parent)
 
+        self._max_concurrency = max_concurrency
+
+        self._progress_tracker = ProgressTracker()
         self._mssql_database = None
 
         actions_notebook = ttk.Notebook(self)
@@ -67,7 +91,9 @@ class Main(ttk.Frame):
 
         db_to_cnflc_action_frame = ttk.Frame(actions_notebook, padding=FRAME_PADDING)
 
-        db_server_frame = tk.LabelFrame(db_to_cnflc_action_frame, text="Database connection")
+        db_server_frame = tk.LabelFrame(
+            db_to_cnflc_action_frame, text="Database connection"
+        )
         self._db_server_widget = DbServerWidget(
             db_server_frame, driver_options=MSSQLDatabase.available_db_drivers()
         )
@@ -85,19 +111,26 @@ class Main(ttk.Frame):
 
         db_server_frame.pack(fill=tk.BOTH, expand=True)
 
-        db_browser_frame = tk.LabelFrame(db_to_cnflc_action_frame, text="Objects to document")
+        db_browser_frame = tk.LabelFrame(
+            db_to_cnflc_action_frame, text="Objects to document"
+        )
 
         self._db_browser_widget = DbBrowserWidget(parent=db_browser_frame)
         self._db_browser_widget.set_input_state(enabled=False)
-        self._db_browser_widget.bind("<<DatabaseSelectionChanged>>", lambda _: self._on_db_selected())
+        self._db_browser_widget.bind(
+            "<<DatabaseSelectionChanged>>", lambda _: self._on_db_selected()
+        )
         self._db_browser_widget.pack(fill=tk.X, expand=True)
 
         db_browser_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
         #
         # Target Confluence params
         #
 
-        target_confluence_frame = tk.LabelFrame(db_to_cnflc_action_frame, text="Target Confluence")
+        target_confluence_frame = tk.LabelFrame(
+            db_to_cnflc_action_frame, text="Target Confluence"
+        )
         self._confluence_widget = ConfluenceConnectionWidget(
             parent=target_confluence_frame
         )
@@ -115,13 +148,35 @@ class Main(ttk.Frame):
         actions_notebook.pack(fill=tk.BOTH, expand=True)
 
         #
-        # Execute button
+        # Execution
         #
 
-        self._execute_button = ttk.Button(
-            db_to_cnflc_action_frame, text="Execute", command=self._on_execute_clicked
+        exec_frame = ttk.Frame(db_to_cnflc_action_frame)
+        exec_frame.rowconfigure((0, 1), weight=1)
+        exec_frame.columnconfigure((0, 1), weight=1)
+
+        self._progressbar_var = tk.DoubleVar()
+        self._progressbar = ttk.Progressbar(
+            exec_frame,
+            orient="horizontal",
+            length=200,
+            mode="determinate",
+            variable=self._progressbar_var,
         )
-        self._execute_button.pack(expand=True, anchor=tk.E, side=tk.TOP, pady=5)
+        self._progressbar.grid(row=0, column=0, sticky=tk.W)
+
+        self._progress_label = ttk.Label(exec_frame)
+        self._progress_label.grid(row=1, column=0, sticky=tk.W, columnspan=2)
+
+        self._execute_button = ttk.Button(
+            exec_frame, text="Execute", command=self._on_execute_clicked
+        )
+        self._execute_button.grid(
+            row=0,
+            column=1,
+            sticky=tk.E,
+        )
+        exec_frame.pack(fill=tk.X, expand=True, side=tk.TOP, pady=5)
 
         self._refresh_button_states()
 
@@ -137,7 +192,9 @@ class Main(ttk.Frame):
 
     def _refresh_button_states(self):
         self._set_execute_button_state(self._required_fields_filled())
-        self._confluence_widget.set_test_connection_button_state(self._confluence_widget.required_fields_filled())
+        self._confluence_widget.set_test_connection_button_state(
+            self._confluence_widget.required_fields_filled()
+        )
 
     def _on_input_params_changed(self) -> None:
         self._refresh_button_states()
@@ -192,87 +249,114 @@ class Main(ttk.Frame):
         self._db_browser_widget.available_schemas = available_schemas
         self._refresh_button_states()
 
-    def _test_confluence_connection(self) -> None:
-        try:
-            confluence = ConfluenceREST(
-                atlassian_url=self._confluence_widget.confluence_root_url
-            )
-            confluence.test_confluence_access(
-                self._confluence_widget.confluence_user_id,
-                self._confluence_widget.confluence_api_token,
+    async def _test_confluence_connection(self) -> None:
+        async with ConfluenceRestClientAsync(
+            self._confluence_widget.confluence_root_url,
+            self._confluence_widget.confluence_user_id,
+            self._confluence_widget.confluence_api_token,
+        ) as confluence_client:
+            # FIXME: seems to give positive results with nonsense space key
+            space_accessible = await confluence_client.test_space_access(
                 space_key=self._confluence_widget.confluence_space_key,
             )
-            messagebox.showinfo(
-                "Connection OK",
-                f"Connection to the Confluence space with given parameters seems to work OK.",
-            )
-        except ConfluenceRESTError as e:
-            messagebox.showerror(
-                "Connection error",
-                f"There were problems while trying to access the space in Confluence.\n\n{e}",
-            )
+            if not space_accessible:
+                messagebox.showerror(
+                    "Connection error",
+                    "There were problems while trying to access the space in "
+                    + "Confluence.",
+                )
+            else:
+                messagebox.showinfo(
+                    "Connection OK",
+                    "Connection to the Confluence space with given parameters "
+                    + "seems to work OK.",
+                )
 
     def _on_test_confluence_connection_clicked(self) -> None:
         self._set_input_state(enabled=False)
         self._confluence_widget.update_test_connection_button_title(testing=True)
         self.update()
-        self._test_confluence_connection()
+        asyncio.run(self._test_confluence_connection())
         self._confluence_widget.update_test_connection_button_title(testing=False)
         self._set_input_state(enabled=True)
 
     def _set_input_state(self, enabled: bool) -> None:
-        """Enable/disable all inputs in the GUI. On enable, tries to keep a reasonable state by checking other components."""
+        """Enable/disable all inputs in the GUI.
+        On enable, tries to keep a reasonable state by checking other components.
+        """
         self._execute_button.config(state=tk.DISABLED if not enabled else tk.NORMAL)
         self._db_server_widget.set_input_state(enabled=enabled)
         self._db_browser_widget.set_input_state(enabled=enabled)
         self._confluence_widget.set_input_state(enabled=enabled)
         if enabled:
-            self._db_browser_widget.set_input_state(enabled=self._db_server_widget.connection_state == DBServerConnectionState.CONNECTED)
+            self._db_browser_widget.set_input_state(
+                enabled=self._db_server_widget.connection_state
+                == DBServerConnectionState.CONNECTED
+            )
             self._refresh_button_states()
 
-    def _execute(self) -> None:
-        """Collect documentation from the database and upload it to Confluence."""
-        # TODO: progress indicator; this is a long operation and blocks the GUI -> should be done async / threaded
-        # FIXME: just following the flow of the original code to see if it works -> make it better
-        try:
-            confluence = ConfluenceREST(
-                atlassian_url=self._confluence_widget.confluence_root_url
+    def _update_progressbar(self, _: ProgressTracker | None = None) -> None:
+        self._progressbar_var.set(
+            self._progress_tracker.percents / 100 * self._progressbar.cget("maximum")
+        )
+        progress_text = ""
+        if self._progress_tracker.target_total > 0:
+            progress_text = (
+                f"{self._progress_tracker.completed}"
+                + f"/{self._progress_tracker.target_total} "
+                + f"({self._progress_tracker.elapsed_time:.1f}s)"
             )
-            confluence.auth = (
+        if self._progress_tracker.message:
+            progress_text += f" - {self._progress_tracker.message}"
+        self._progress_label.config(text=progress_text)
+        self.update()
+
+    def _start_db_documenter_worker(self) -> None:
+        """Start the database documenter worker thread."""
+        exc_thread = threading.Thread(target=self._execute_db_documenter)
+        exc_thread.start()
+
+    def _execute_db_documenter(self) -> None:
+        """Database documenter GUI flow."""
+        self._set_input_state(enabled=False)
+        self._execute_button.config(text="Executing...")
+        self.update()
+        asyncio.run(self._document_db_to_confluence_async())
+        self._set_input_state(enabled=True)
+        self._execute_button.config(text="Execute")
+
+    async def _document_db_to_confluence_async(self) -> None:
+        """Collect documentation from the database and upload it to Confluence."""
+        # TODO: dependent databases selection
+        self._progress_tracker = ProgressTracker(
+            on_step_callback=self._update_progressbar
+        )
+
+        try:
+            async with ConfluenceRestClientAsync(
+                self._confluence_widget.confluence_root_url,
                 self._confluence_widget.confluence_user_id,
                 self._confluence_widget.confluence_api_token,
-            )
-            confluence_space_id = confluence.get_space_id(
-                self._confluence_widget.confluence_space_key
-            )
-            # FIXME: unncessary to collect schemas again, we already have them selected?
-            schemas = collect_schemas_to_document(
-                self._mssql_database, self._db_browser_widget.selected_schemas
-            )
-            # TODO: implement dependant database filtering
-            database_filter = None
-            dep_databases = collect_databases_to_query_dependencies(
-                self._mssql_database, database_filter, self._mssql_database.get_databases()
-            )
-            confulence_parent_page = self._confluence_widget.confluence_parent_page
-            parent_page_id = create_or_update_root_page(
-                self._mssql_database,
-                confluence,
-                confluence_space_id,
-                confulence_parent_page,
-            )
-            create_or_update_subpages(
-                self._mssql_database,
-                confluence,
-                confluence_space_id,
-                schemas,
-                dep_databases,
-                parent_page_id,
-            )
+                progress_callback=self._progress_tracker.step,
+            ) as confluence_client:
+                await document_db_to_confluence_async(
+                    confluence_client=confluence_client,
+                    db_client=self._mssql_database,
+                    confluence_space_key=self._confluence_widget.confluence_space_key,
+                    parent_page_title=self._confluence_widget.confluence_parent_page,
+                    schemas=self._db_browser_widget.selected_schemas,
+                    progress_tracker=self._progress_tracker,
+                    additional_databases=[],
+                    max_concurrency=self._max_concurrency,
+                )
+
             messagebox.showinfo(
                 "Execution complete",
                 "The documentation was successfully uploaded to Confluence.",
             )
+            self._progress_tracker.reset()
+            self._update_progressbar()
+            self._progressbar_var.set(0)
         except ConfluenceRESTError as e:
             messagebox.showerror(
                 "Execution error",
@@ -288,16 +372,31 @@ class Main(ttk.Frame):
         self._execute_button.config(text=title)
 
     def _on_execute_clicked(self) -> None:
-        self._set_input_state(enabled=False)
-        self._execute_button.config(text="Executing...")
-        self.update()
-        self._execute()
-        self._set_input_state(enabled=True)
-        self._execute_button.config(text="Execute")
+        self._start_db_documenter_worker()
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=f"Palje GUI v{PALJE_VERSION} "
+        + "- A Swiss army knife for managing documentation in Confluence ."
+    )
+    parser.add_argument(
+        "--max-concurrency",
+        type=int,
+        default=DEFAULT_CONCURRENCY_LIMIT,
+        help="Concurrency limit. Prevents database overloading.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"Palje GUI v{PALJE_VERSION}",
+    )
+    return parser.parse_args()
 
 
 def main():
-    _ = App()
+    args = parse_args()
+    _ = App(max_concurrency=args.max_concurrency)
 
 
 if __name__ == "__main__":

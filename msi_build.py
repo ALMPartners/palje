@@ -12,7 +12,7 @@ from palje.version import version as palje_version
 # a system ("all users") MSI installer will be created.
 # Any other or missing value creates a user installer ("single user").
 # The final installer name will be suffixed with "-SYSTEM" or "-USER" respectively.
-MSI_TARGET_TYPE_ENV_VAR = 'PALJE_MSI_TARGET_TYPE'
+MSI_TARGET_TYPE_ENV_VAR = "PALJE_MSI_TARGET_TYPE"
 
 # Application information
 name = "Palje"
@@ -21,7 +21,7 @@ author = "ALM Partners"
 author_email = "servicedesk@almpartners.fi"
 url = "https://almpartners.com/"
 description = ""
-icon = 'palje.ico'
+icon = "palje.ico"
 
 # Specify the GUID (DO NOT CHANGE ON UPGRADE)
 # This has been obtained using:
@@ -34,7 +34,7 @@ programfiles_dir = (
 )
 
 include_files = [
-    "src/palje/queries/database_queries.ini",
+    "src/palje/mssql/database_queries.ini",
     "src/palje/gui/palje.png",
 ]
 
@@ -43,32 +43,27 @@ include_files = [
 build_exe_options = {
     "packages": ["palje"],
     "include_msvcr": True,
-    "include_files": include_files,  
+    "include_files": include_files,
 }
 
 # Icon table, see: https://learn.microsoft.com/en-us/windows/win32/msi/icon-table
-icon_table = [
-    (
-        'PaljeIcon',
-        icon
-    )
-]
+icon_table = [("PaljeIcon", icon)]
 
 # Shortcut table, see: https://learn.microsoft.com/en-us/windows/win32/msi/shortcut-table
 shortcut_table = [
     (
-        'PaljeGUIStartMenu', # Unique shortcut key
-        'StartMenuFolder', # Directory
-        'Palje', # Name
-        'TARGETDIR', # Component_
-        '[TARGETDIR]palje-gui.exe', # Target
-        None, # Arguments
-        None, # Description
-        None, # Hotkey
-        'PaljeIcon', # Icon
-        None, # IconIndex
-        None, # ShowCmd
-        'TARGETDIR' # WkDir
+        "PaljeGUIStartMenu",  # Unique shortcut key
+        "StartMenuFolder",  # Directory
+        "Palje",  # Name
+        "TARGETDIR",  # Component_
+        "[TARGETDIR]palje-gui.exe",  # Target
+        None,  # Arguments
+        None,  # Description
+        None,  # Hotkey
+        "PaljeIcon",  # Icon
+        None,  # IconIndex
+        None,  # ShowCmd
+        "TARGETDIR",  # WkDir
     )
 ]
 
@@ -76,17 +71,13 @@ shortcut_table = [
 property_table = [
     (
         # This property is used to set the icon for the Add/Remove Programs entry
-        'ARPPRODUCTICON',
-        'PaljeIcon'
+        "ARPPRODUCTICON",
+        "PaljeIcon",
     )
 ]
 
 # MSI data containing installer database tables
-msi_data = {
-    'Icon': icon_table,
-    'Shortcut': shortcut_table,
-    'Property': property_table
-}
+msi_data = {"Icon": icon_table, "Shortcut": shortcut_table, "Property": property_table}
 
 # Options affecting the installer file
 
@@ -100,15 +91,17 @@ bdist_msi_options = {
     "target_name": target_name,
     "initial_target_dir": rf"[{programfiles_dir}]\{author}\{name}",
     "all_users": installer_type == "SYSTEM",
-    'data': msi_data,
+    "data": msi_data,
 }
 
 options = {"build_exe": build_exe_options, "bdist_msi": bdist_msi_options}
 
 base = "Win32GUI" if sys.platform == "win32" else None
 
-palje_exe = Executable("src/palje/__main__.py", target_name="palje.exe", base=None)
-palje_gui_exe = Executable("src/palje/gui/gui.py", target_name="palje-gui.exe", base=base, icon=icon)
+palje_exe = Executable("src/palje/cli.py", target_name="palje.exe", base=None)
+palje_gui_exe = Executable(
+    "src/palje/gui/gui.py", target_name="palje-gui.exe", base=base, icon=icon
+)
 
 setup(
     name=name,
