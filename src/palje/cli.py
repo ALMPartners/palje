@@ -1,3 +1,6 @@
+""" Legacy CLI for Palje. Kept for backwards compatibility.
+    *** No new features should be added here, use cli2.py instead! ***
+ """
 # Palje - Document MSSQL databases to Confluence wiki
 #
 # Copyright 2021 ALM Partners Oy

@@ -26,9 +26,22 @@ cd .\palje
 pip install [-e] .
 ```
 
+## Development environment
+
+Install and set up dev and test tooling with commands:
+
+```
+pip install -e .[dev, test]
+pre-commit install
+```
+
+This takes `black` code formatting in use via `pre-commit`.
+
 # Usage
 
 Palje can be used either from the command line (CLI) or from the graphical user interface (GUI).
+
+Notice that there are two versions of the command-line tool: legacy `palje` and newer `palje2`. See below for details.
 
 ## Prerequisites
 
@@ -68,7 +81,47 @@ palje-gui
 
 See the CLI documentation below for information on various parameters - it all applies to GUI, too.
 
-## CLI and arguments
+
+## CLI and arguments (current palje2 version)
+
+In comparison to `palje`, the new `palje2` CLI is more flexible and adds more features for managing Confluence documentation e.g. deletion of Confluence page hierarchies.
+
+See online help for up-to-date documentation for available options and sub-commands.
+```
+palje2 --help
+```
+
+To see specific documentation for a sub-command, use the -h/--help switch after the sub-command e.g.
+
+```
+palje2 document --help
+palje2 delete --help
+```
+
+### Parameters from ENV vars
+
+With `palje2` many parameters (e.g. Confluence authentication params) can be set into ENV variables from where they are automatically read at runtime. This makes continous use more user-friendly: less repetative typing, shorter and clearer commands, sensitive data stays out of sight, ...
+
+Notice that using ENV vars is optional: alternatively you can type parameters on the command line and/or leave them off and let `palje2` interactively prompt for any required parameter values.
+
+See the online-documentation for supported ENV vars and their exact names.
+
+Example of setting ENV vars in PowerShell:
+
+```
+$env:PALJE_ATLASSIAN_USER_ID = "firstname.lastname@organization.org"
+$env:PALJE_ATLASSIAN_API_TOKEN = "S3CR3T"
+$env:PALJE_DB_SERVER = "localhost,14330"
+...
+```
+
+If you want to unset an ENV var, you can do it like:
+
+```
+$env:PALJE_DB_PASSWORD = $null
+```
+
+## CLI and arguments (legacy version)
 
 See online help for up-to-date documentation for available options.
 ```
@@ -97,7 +150,7 @@ palje confluence-url space server database
 | dependent | No | Names of the databases, where object dependencies are sought | list of str | If databases not given, dependencies are sought only in documented database |
 | db-driver | No | Name of the database driver | str | "ODBC Driver 17 for SQL Server" |
 | authentication | No | Authentication method to use. Options are "SQL", "Windows", "AAD" and "AzureIdentity". | str | "SQL"
- 
+
 
 ## Usage example
 
@@ -161,7 +214,7 @@ Notice that if you delete objects from database, Palje won't delete the correspo
 
 ## Tests
 
-Run tests with [tox](https://pypi.org/project/tox/) 
+Run tests with [tox](https://pypi.org/project/tox/)
 ```
 pip install tox # OR install as an optional depencency with palje itself: pip install .[test]
 

@@ -1,0 +1,23 @@
+default_language_version:
+    python: python3.11
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+        exclude: tests/test_data/
+    -   id: check-yaml
+    -   id: check-added-large-files
+        args: ['--maxkb=1024']
+    -   id: check-case-conflict
+    -   id: check-docstring-first
+    -   id: check-json
+    -   id: check-merge-conflict
+    -   id: check-toml
+    -   id: detect-private-key
+    -   id: mixed-line-ending
+-   repo: https://github.com/psf/black
+    rev: 23.11.0
+    hooks:
+      - id: black

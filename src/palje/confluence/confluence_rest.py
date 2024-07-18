@@ -5,15 +5,30 @@ from __future__ import annotations
 # Copyright 2021 ALM Partners Oy
 # SPDX-License-Identifier: Apache-2.0
 
+from dataclasses import dataclass
+from enum import Enum
 import json
 from typing import Callable
 import aiohttp
 from urllib.parse import urljoin
 
 
+class ConfluenceResourceType(Enum):
+    """Confluence target types."""
+
+    PAGE = "page"
+    SPACE = "space"
+
+
+class ConfluenceOperation(Enum):
+    """Confluence operations."""
+
+    DELETE = "delete"
+    CREATE = "create"
+
+
 # TODO:
 #  expection handling
-#   - get rid of response.raise_for_status()
 #   - wrap aiohttp exceptions into ConfluenceRESTErrors to avoid
 #     leaking implementation details
 #
@@ -25,16 +40,34 @@ class ConfluenceRESTError(Exception):
         super().__init__(self.message)
 
 
-class ConfluenceRESTAuthError(ConfluenceRESTError):
-    """Generic Confluence related exception"""
+class ConfluenceRESTNotFoundError(ConfluenceRESTError):
+    """Exception for a missing Confluence resource"""
 
     def __init__(self, message):
         self.message = message
         super().__init__(self.message)
 
 
+class ConfluenceRESTAuthError(ConfluenceRESTError):
+    """Auth related Confluence exception"""
+
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
+
+
+# @dataclass
+# class ConfluenceChildPageRecord:
+#     """ Confluence child page result coming from children API """
+#     id: str
+#     status: str
+#     title: str
+#     spaceId: str
+#     childPosition: int
+
+
 class ConfluenceRestClientAsync:
-    """A class for asynchronously interacting with the Confluence REST API.
+    """A class for asynchronously inte racting with the Confluence REST API.
 
     Use the class in async context with the `async with` statement.
 
@@ -44,7 +77,7 @@ class ConfluenceRestClientAsync:
     async with ConfluenceRestClientAsync(
         "https://wiki.example.com",
         "username"
-        "api_key"
+        "api_token"
     ) as client:
         space_id = await client.get_space_id_async("SPACE")
         page_id = await client.new_page_async(space_id, "Page title", "Page content")
@@ -126,6 +159,109 @@ class ConfluenceRestClientAsync:
         if self._progress_callback:
             self._progress_callback(success, message)
 
+    async def get_child_page_ids_async(self, parent_page_id: int) -> list[int]:
+        """Get the ids of the child pages of the given page. This is not recursive i.e.
+        only the direct children of the page are returned. Due to Confluence having a
+        limit (250) on the number of results per request, this method may make multiple
+        requests.
+
+        Arguments
+        ---------
+        parent_page_id
+            The id of the parent page.
+
+        Returns
+        -------
+        list[int]
+            A list of the ids of the child pages. If the parent page
+            has no children, an empty list is returned.
+        """
+
+        # See the current max limit for results:
+        # https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-children/#api-pages-id-children-get
+        MAX_RESULTS = 250
+
+        url = self._make_url(
+            self._root_url,
+            f"wiki/api/v2/pages/{parent_page_id}/children?limit={MAX_RESULTS}",
+        )
+
+        has_more_children = True
+        child_page_ids = []
+
+        while has_more_children:
+            try:
+                async with self._client.get(url) as response:
+                    response.raise_for_status()
+                    if response_json := (await response.json()):
+                        child_page_ids.extend(
+                            [int(result["id"]) for result in response_json["results"]]
+                        )
+                        # If there are more children available, an iterator link to
+                        # the next batch is provided in the response.
+                        if (
+                            "_links" in response_json
+                            and "next" in response_json["_links"]
+                        ):
+                            url = self._make_url(
+                                self._root_url, response_json["_links"]["next"]
+                            )
+                        else:
+                            has_more_children = False
+                    else:
+                        has_more_children = False
+            except aiohttp.ClientResponseError as e:
+                if e.status == 401:
+                    raise ConfluenceRESTAuthError(
+                        f"Access denied for page id#{parent_page_id}."
+                        + " Check your credentials."
+                    ) from e
+                raise ConfluenceRESTError(
+                    f"Failed to fetch children for page id#{parent_page_id}."
+                    + f" HTTP/{e.status}."
+                ) from e
+        self._update_write_progress(
+            True, f"page#{parent_page_id} has {len(child_page_ids)} child pages"
+        )
+        return child_page_ids
+
+    async def delete_page_async(self, page_id: int) -> None:
+        """Delete a single page by its id. Possible child pages are left intact.
+
+        Arguments
+        ---------
+        page_id
+            The id of the page to be deleted.
+
+        Raises
+        ------
+        ConfluenceRESTAuthError
+            If the access to the page is denied.
+
+        ConfluenceRESTError
+            If the deletion fails for any other reason.
+
+        """
+        try:
+            url = self._make_url(self._root_url, f"wiki/api/v2/pages/{page_id}")
+            async with self._client.delete(url) as response:
+                response.raise_for_status()
+                self._update_write_progress(True, f"id#{page_id}")
+
+        except aiohttp.ClientResponseError as e:
+            self._update_write_progress(False, f"id#{page_id}")
+            if e.status == 401:
+                raise ConfluenceRESTAuthError(
+                    f"Access denied to page id#{page_id}. Check your credentials."
+                ) from e
+            elif e.status == 404:
+                raise ConfluenceRESTNotFoundError(
+                    f"Page id#{page_id} was not found."
+                ) from e
+            raise ConfluenceRESTError(
+                f"Failed to delete page id#{page_id}. HTTP/{e.status}."
+            ) from e
+
     async def get_space_id_async(self, space_key: str) -> int | None:
         """Get the id of the space.
 
@@ -147,6 +283,12 @@ class ConfluenceRestClientAsync:
             space_id: int | None = None
             if results := (await response.json())["results"]:
                 space_id = results[0]["id"]
+            if not space_id:
+                raise ConfluenceRESTNotFoundError(
+                    "Couldn't resolve an id for Confluence space key "
+                    + f"'{space_key}'. Check the space key, credentials, "
+                    + "and permissions."
+                )
             return space_id
 
     async def new_page_async(
@@ -221,6 +363,56 @@ class ConfluenceRestClientAsync:
                     page_id = results[0]["id"]
             return page_id
 
+    async def get_permitted_operations_on_resource_async(
+        self, resource_type: ConfluenceResourceType, resource_id: int
+    ) -> dict:
+        """Get allowed operations for a Confluence resource.
+
+        Arguments
+        ---------
+        resource_type
+            The type of the resource.
+        resource_id
+            The id of the resource.
+
+        Returns
+        -------
+        dict
+            The permissions of the resource.
+        """
+
+        if resource_type not in ConfluenceResourceType:
+            raise ValueError(f"Invalid resource type: {resource_type}")
+
+        if resource_type == ConfluenceResourceType.PAGE:
+            url = self._make_url(
+                self._root_url, f"wiki/api/v2/pages/{resource_id}/operations"
+            )
+        elif resource_type == ConfluenceResourceType.SPACE:
+            url = self._make_url(
+                self._root_url, f"wiki/api/v2/spaces/{resource_id}/operations"
+            )
+
+        try:
+            async with self._client.get(url) as response:
+                response.raise_for_status()
+                response_json = await response.json()
+                allowed_ops = response_json["operations"]
+                return allowed_ops
+        except aiohttp.ClientResponseError as e:
+            if e.status == 401:
+                raise ConfluenceRESTAuthError(
+                    f"Access denied to {resource_type.value} id#{resource_id}. Check your credentials."
+                ) from e
+            elif e.status == 404:
+                raise ConfluenceRESTNotFoundError(
+                    f"Can't find {resource_type.value} id#{resource_id} was not found."
+                ) from e
+            raise ConfluenceRESTError(
+                f"Failed to fetch allowed ops for {resource_type.value} id#{resource_id}. HTTP/{e.status}."
+            ) from e
+
+    # TODO: remove this and use get_permitted_operations_on_resource_async instead
     async def test_space_access(self, space_key: str) -> bool:
         """Test if the Confluence is accessible with current crendentials.
 

@@ -304,7 +304,8 @@ async def create_or_update_subpages_async(
                 object_dependencies,
                 obj_type_page_id,
             )
-            progress_tracker.target_total += len(tasks)
+            if progress_tracker:
+                progress_tracker.target_total += len(tasks)
 
             await asyncio.gather(*tasks)
 
