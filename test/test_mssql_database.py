@@ -1,12 +1,12 @@
 import pyodbc
-from palje.mssql.mssql_database import MSSQLDatabase
+from palje.mssql.mssql_database import MSSQLDatabaseAuthType, MSSQLDatabase
 import pytest
 
 from test.conftest import TEST_DB_NAME
 
 
 def test_sql_queries_should_be_read_succesfully(mssql_db):
-    queries = mssql_db.queries
+    queries = mssql_db._queries
     assert queries
     assert "database_names" in queries
     assert "table_schemas" in queries
@@ -40,7 +40,7 @@ def test_when_using_win_auth_ask_credentials_should_return_connection_str_with_t
     port = 1433
     database = "PALJE_TEST"
     driver = "ODBC Driver 17 for SQL Server"
-    authentication = "Windows"
+    authentication = MSSQLDatabaseAuthType.WINDOWS
     db_client = MSSQLDatabase(
         server=server,
         port=port,
@@ -48,15 +48,18 @@ def test_when_using_win_auth_ask_credentials_should_return_connection_str_with_t
         driver=driver,
         authentication=authentication,
     )
-    excpeted = f"DRIVER={{{driver}}};SERVER={server},{port};DATABASE={database};Trusted_Connection=yes;"
+    excpeted = f"DRIVER={{{driver}}};SERVER={server},{port};DATABASE={database};Trusted_Connection=yes"
     actual = db_client.connection_string
     assert actual == excpeted
 
 
 @pytest.mark.mssql
 class TestWithSQLServer:
-    def test_connect_should_fail_with_invalid_credentials(self, mssql_db):
-        mssql_db.password = "wrong_password"
+    def test_connect_should_fail_with_invalid_credentials(
+        self, mssql_db: MSSQLDatabase
+    ):
+        # FIXME: avoid tampering of private attributes
+        mssql_db._password = "wrong_password"
         with pytest.raises(pyodbc.InterfaceError):
             mssql_db.connect()
 
@@ -68,7 +71,7 @@ class TestWithSQLServer:
     ):
         connected_db.close()
         with pytest.raises(pyodbc.ProgrammingError):
-            connected_db.connection.cursor()  # cannot open cursor for closed connection
+            connected_db._connection.cursor()  # cannot open cursor for closed connection
 
     def test_close_should_fail_with_closed_connection(self, mssql_db, capsys):
         mssql_db.close()

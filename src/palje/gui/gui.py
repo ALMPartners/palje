@@ -17,7 +17,10 @@ from palje.gui.components.db_server_widget import (
     DBServerConnectionState,
     DbServerWidget,
 )
-from palje.mssql.mssql_database import MSSQLDatabase as MSSQLDatabase
+from palje.mssql.mssql_database import (
+    MSSQLDatabaseAuthType,
+    MSSQLDatabase as MSSQLDatabase,
+)
 from palje.db_to_confluence import (
     DEFAULT_CONCURRENCY_LIMIT,
     document_db_to_confluence_async,
@@ -205,7 +208,9 @@ class Main(ttk.Frame):
                 server=self._db_server_widget.server,
                 database=self._db_server_widget.db_name,
                 driver=self._db_server_widget.driver,
-                authentication=self._db_server_widget.auth_method,
+                authentication=MSSQLDatabaseAuthType[
+                    self._db_server_widget.auth_method
+                ],
                 port=self._db_server_widget.port,
                 username=self._db_server_widget.username,
                 password=self._db_server_widget.password,

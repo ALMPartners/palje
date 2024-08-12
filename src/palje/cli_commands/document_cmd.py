@@ -7,7 +7,7 @@ import click
 from palje.confluence.confluence_ops import is_page_creation_allowed_async
 from palje.confluence.confluence_rest import ConfluenceRestClientAsync
 from palje.db_to_confluence import document_db_to_confluence_async
-from palje.mssql.mssql_database import MSSQLDatabase
+from palje.mssql.mssql_database import MSSQLDatabaseAuthType, MSSQLDatabase
 from palje.progress_tracker import ProgressTracker
 
 
@@ -65,6 +65,7 @@ def _display_progress(pt: ProgressTracker):
     help="Database authentication method. Optionally read from env var "
     + "PALJE_DB_AUTH.",
     default=lambda: os.environ.get("PALJE_DB_AUTH", "SQL"),
+    callback=lambda _ctx, _param, value: MSSQLDatabaseAuthType[value],
     show_default=True,
 )
 @click.option(
@@ -137,7 +138,7 @@ def document_db_to_confluence(
     confluence_space_key: str,
     atlassian_user_id: str,
     atlassian_api_token: str,
-    db_auth: str,
+    db_auth: MSSQLDatabaseAuthType,
     db_driver: str,
     db_server: str,
     db_name: str,
@@ -164,7 +165,7 @@ def document_db_to_confluence(
     atlassian_api_token : str
         The Atlassian API token.
 
-    db_auth : str
+    db_auth : MSSQLDatabaseAuthType
         The authentication method to the database.
 
     db_driver : str
@@ -222,7 +223,11 @@ def document_db_to_confluence(
     if not db_name:
         db_name = click.prompt("Database")
 
-    if db_auth not in ["Windows", "AAD", "AzureIdentity"]:
+    if db_auth not in [
+        MSSQLDatabaseAuthType.WINDOWS,
+        MSSQLDatabaseAuthType.AAD,
+        MSSQLDatabaseAuthType.AZURE_IDENTITY,
+    ]:
         if not db_username:
             db_username = click.prompt("Database username")
         if not db_password:
@@ -232,11 +237,11 @@ def document_db_to_confluence(
 
     click.echo(f"Connecting to database {db_name}@{db_server}...")
     click.echo(f"  pyodbc driver: {db_driver}")
-    click.echo(f"  authentication: {db_auth}")
+    click.echo(f"  authentication: {db_auth.value}")
 
     try:
         # TODO: move auth logic / parameter handling into MSSQLDatabase
-        if db_auth == "Windows":
+        if db_auth == MSSQLDatabaseAuthType.WINDOWS:
             database_client = MSSQLDatabase(
                 server=db_server,
                 database=db_name,
@@ -289,8 +294,6 @@ def document_db_to_confluence(
         )
 
     progress_tracker = ProgressTracker(on_step_callback=_display_progress)
-
-    # click.echo("Documenting database objects to Confluence...")
 
     ret_val = 0
     try:

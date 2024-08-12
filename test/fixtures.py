@@ -6,7 +6,7 @@ from warnings import catch_warnings, simplefilter
 
 import pytest
 from ahjo.operations.tsql import db_object_properties as ahjo
-from palje.mssql.mssql_database import MSSQLDatabase
+from palje.mssql.mssql_database import MSSQLDatabaseAuthType, MSSQLDatabase
 from sqlalchemy.exc import SAWarning
 from sqlalchemy.schema import CreateSchema
 from sqlalchemy import text
@@ -18,7 +18,7 @@ from test.http_server import RequestHandler
 
 @pytest.fixture(scope="session")
 def mssql_config(request):
-    authentication = "SQL"
+    authentication = MSSQLDatabaseAuthType.SQL
     server = request.config.getoption("mssql_host")
     driver = request.config.getoption("mssql_driver")
     username = request.config.getoption("mssql_username")
