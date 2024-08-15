@@ -48,7 +48,7 @@ build-backend = "setuptools.build_meta"
 package-dir = {"" = "src"}
 
 [tool.setuptools_scm]
-write_to = "src/palje/version.py"
+version_file = "src/palje/version.py"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
