@@ -12,6 +12,9 @@ from typing import Callable
 import aiohttp
 from urllib.parse import urljoin
 
+from palje.confluence.confluence_models import ConfluencePage
+from palje.confluence.confluence_rest_models import ConfluenceApiPageResult
+
 
 class ConfluenceResourceType(Enum):
     """Confluence target types."""
@@ -54,16 +57,6 @@ class ConfluenceRESTAuthError(ConfluenceRESTError):
     def __init__(self, message):
         self.message = message
         super().__init__(self.message)
-
-
-# @dataclass
-# class ConfluenceChildPageRecord:
-#     """ Confluence child page result coming from children API """
-#     id: str
-#     status: str
-#     title: str
-#     spaceId: str
-#     childPosition: int
 
 
 class ConfluenceRestClientAsync:
@@ -159,10 +152,12 @@ class ConfluenceRestClientAsync:
         if self._progress_callback:
             self._progress_callback(success, message)
 
-    async def get_child_page_ids_async(self, parent_page_id: int) -> list[int]:
-        """Get the ids of the child pages of the given page. This is not recursive i.e.
+    async def get_child_pages_async(
+        self, parent_page_id: int
+    ) -> list[ConfluenceApiPageResult]:
+        """Get the child pages of the given page. This is not recursive i.e.
         only the direct children of the page are returned. Due to Confluence having a
-        limit (250) on the number of results per request, this method may make multiple
+        limit (250) on the number of results per response, this method may make multiple
         requests.
 
         Arguments
@@ -172,13 +167,13 @@ class ConfluenceRestClientAsync:
 
         Returns
         -------
-        list[int]
-            A list of the ids of the child pages. If the parent page
+        list[ConfluenceChildPageResult]
+            A list of the child pages. If the parent page
             has no children, an empty list is returned.
         """
 
         # See the current max limit for results:
-        # https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-children/#api-pages-id-children-get
+        # https://developer.atlassian.com/cloud/confluence/rest/api-group-content/#api-api-content-id-child-get
         MAX_RESULTS = 250
 
         url = self._make_url(
@@ -187,15 +182,18 @@ class ConfluenceRestClientAsync:
         )
 
         has_more_children = True
-        child_page_ids = []
+        child_page_results = []
 
         while has_more_children:
             try:
                 async with self._client.get(url) as response:
                     response.raise_for_status()
                     if response_json := (await response.json()):
-                        child_page_ids.extend(
-                            [int(result["id"]) for result in response_json["results"]]
+                        child_page_results.extend(
+                            [
+                                ConfluenceApiPageResult.from_dict(result)
+                                for result in response_json["results"]
+                            ]
                         )
                         # If there are more children available, an iterator link to
                         # the next batch is provided in the response.
@@ -221,17 +219,17 @@ class ConfluenceRestClientAsync:
                     + f" HTTP/{e.status}."
                 ) from e
         self._update_write_progress(
-            True, f"page#{parent_page_id} has {len(child_page_ids)} child pages"
+            True, f"page#{parent_page_id} has {len(child_page_results)} child pages"
         )
-        return child_page_ids
+        return child_page_results
 
-    async def delete_page_async(self, page_id: int) -> None:
-        """Delete a single page by its id. Possible child pages are left intact.
+    async def delete_page_async(self, page: ConfluencePage) -> None:
+        """Delete a single page from Confluence. Possible child pages are left intact.
 
         Arguments
         ---------
-        page_id
-            The id of the page to be deleted.
+        ConfluencePage
+            ConfluencePage that identifies the page to be deleted.
 
         Raises
         ------
@@ -243,27 +241,27 @@ class ConfluenceRestClientAsync:
 
         """
         try:
-            url = self._make_url(self._root_url, f"wiki/api/v2/pages/{page_id}")
+            url = self._make_url(self._root_url, f"wiki/api/v2/pages/{page.id}")
             async with self._client.delete(url) as response:
                 response.raise_for_status()
-                self._update_write_progress(True, f"id#{page_id}")
+                self._update_write_progress(True, str(page))
 
         except aiohttp.ClientResponseError as e:
-            self._update_write_progress(False, f"id#{page_id}")
+            self._update_write_progress(False, str(page))
             if e.status == 401:
                 raise ConfluenceRESTAuthError(
-                    f"Access denied to page id#{page_id}. Check your credentials."
+                    f"Access denied to page '{str(page)}'. Check your credentials."
                 ) from e
             elif e.status == 404:
                 raise ConfluenceRESTNotFoundError(
-                    f"Page id#{page_id} was not found."
+                    f"Page id#{page.id} was not found."
                 ) from e
             raise ConfluenceRESTError(
-                f"Failed to delete page id#{page_id}. HTTP/{e.status}."
+                f"Failed to delete page '{str(page)}'. HTTP/{e.status}."
             ) from e
 
     async def get_space_id_async(self, space_key: str) -> int | None:
-        """Get the id of the space.
+        """Get the id for given Confluence space key.
 
         Arguments
         ---------
@@ -273,28 +271,41 @@ class ConfluenceRestClientAsync:
         Returns
         -------
         int
-            The id of the space. If the space is not found, None is returned.
+             The id of the space. If the space is not found, None is returned.
         """
-        api_endpoint = self._make_url(self._root_url, "wiki/api/v2/spaces")
-        async with self._client.get(
-            api_endpoint, params={"keys": space_key}
-        ) as response:
-            response.raise_for_status()
-            space_id: int | None = None
-            if results := (await response.json())["results"]:
-                space_id = results[0]["id"]
-            if not space_id:
+        try:
+            api_endpoint = self._make_url(self._root_url, "wiki/api/v2/spaces")
+            async with self._client.get(
+                api_endpoint, params={"keys": space_key}
+            ) as response:
+                response.raise_for_status()
+                space_id: int | None = None
+                if results := (await response.json())["results"]:
+                    space_id = results[0]["id"]
+                if not space_id:
+                    raise ConfluenceRESTNotFoundError(
+                        "Couldn't resolve id for Confluence space "
+                        + f"'{space_key}'. Check the space key, credentials, "
+                        + "and permissions."
+                    )
+                return space_id
+        except aiohttp.ClientResponseError as e:
+            if e.status == 401:
+                raise ConfluenceRESTAuthError(
+                    f"Access denied. Check your credentials."
+                ) from e
+            elif e.status == 404:
                 raise ConfluenceRESTNotFoundError(
-                    "Couldn't resolve an id for Confluence space key "
-                    + f"'{space_key}'. Check the space key, credentials, "
-                    + "and permissions."
-                )
-            return space_id
+                    f"Space was not found or not accessible with given credentials."
+                ) from e
+            raise ConfluenceRESTError(
+                f"Couldn't fetch space id for '{space_key}'. HTTP/{e.status}."
+            ) from e
 
     async def new_page_async(
         self, space_id, page_title, page_content, parent_id=None
     ) -> int | None:
-        """Create a new page.
+        """Create a new Confluence page.
 
         Arguments
         ---------
@@ -335,6 +346,110 @@ class ConfluenceRestClientAsync:
             self._update_write_progress(page_id is not None, page_title)
             return page_id
 
+    # FIXME: refactor duplicate code with get_page_by_title_async
+    # Notice that while DELETE /pages/:id could be used here, it would need
+    # status filtering to avoid returning "trashed" and similar pages.
+    async def get_page_by_id_async(
+        self, page_id: int
+    ) -> ConfluenceApiPageResult | None:
+        """Get the page in given space by its ID.
+
+        Arguments
+        ---------
+        page_id
+            The id of the page.
+
+        Returns
+        -------
+        ConfluenceApiPageResult
+            Details of found page.
+
+        Raises
+        ------
+        ConfluenceRESTNotFoundError
+            If the page is not found.
+
+        ConfluenceRESTAuthError
+            If access to the page is denied.
+
+        ConfluenceRESTError
+            If the request fails for any other reason.
+        """
+        url = self._make_url(self._root_url, f"wiki/api/v2/pages")
+
+        try:
+            async with self._client.get(url, params={"id": [page_id]}) as response:
+                response.raise_for_status()
+                if results := (await response.json())["results"]:
+                    return ConfluenceApiPageResult.from_dict(results[0])
+                raise ConfluenceRESTNotFoundError(f"Can't find page id#{page_id}.")
+        except aiohttp.ClientResponseError as e:
+            if e.status == 401:
+                raise ConfluenceRESTAuthError(
+                    f"Access denied to page id#{page_id}. Check your credentials."
+                ) from e
+            raise ConfluenceRESTError(
+                f"Failed to fetch page id#{page_id}. HTTP/{e.status}."
+            ) from e
+
+    async def get_page_by_title_async(
+        self, space_id: int, page_title: str
+    ) -> ConfluenceApiPageResult:
+        """Get the page in given space with given title.
+
+        Page titles are unique inside a space.
+
+        Arguments
+        ---------
+        space_id
+            The id of the space the page is in.
+        page_title
+            The title of the page.
+
+        Returns
+        -------
+        ConfluenceApiPageResult
+            Details of found page.
+
+        Raises
+        ------
+        ConfluenceRESTNotFoundError
+            If the page is not found.
+
+        ConfluenceRESTAuthError
+            If access to the page is denied.
+
+        ConfluenceRESTError
+            If the request fails for any other reason.
+        """
+        url = self._make_url(self._root_url, "wiki/api/v2/pages")
+
+        try:
+            async with self._client.get(
+                url, params={"title": page_title, "space-id": [space_id]}
+            ) as response:
+                response.raise_for_status()
+                if response.status == 200:
+                    if results := (await response.json())["results"]:
+                        return ConfluenceApiPageResult.from_dict(results[0])
+                    else:
+                        # Both /pages and /spaces/:key/pages apis seem to return
+                        # HTTP/200 for missing pages instead of HTTP/404
+                        raise ConfluenceRESTNotFoundError(
+                            f"Can't find page '{page_title}' from space id#{space_id}."
+                        )
+        except aiohttp.ClientResponseError as e:
+            if e.status == 401:
+                raise ConfluenceRESTAuthError(
+                    f"Access denied to page '{page_title}' in space id#{space_id}."
+                    + " Check your credentials."
+                ) from e
+            raise ConfluenceRESTError(
+                f"Failed to fetch page '{page_title}' in space id#{space_id}."
+                + f" HTTP/{e.status}."
+            ) from e
+
+    # TODO: remove this and use get_page_by_title_async instead
     async def get_page_id_async(self, space_id: int, page_title: str) -> int | None:
         """Get the id of the page in given space with given title.
 
@@ -406,32 +521,11 @@ class ConfluenceRestClientAsync:
                 ) from e
             elif e.status == 404:
                 raise ConfluenceRESTNotFoundError(
-                    f"Can't find {resource_type.value} id#{resource_id} was not found."
+                    f"Can't find {resource_type.value} id#{resource_id}."
                 ) from e
             raise ConfluenceRESTError(
                 f"Failed to fetch allowed ops for {resource_type.value} id#{resource_id}. HTTP/{e.status}."
             ) from e
-
-    # TODO: remove this and use get_permitted_operations_on_resource_async instead
-    async def test_space_access(self, space_key: str) -> bool:
-        """Test if the Confluence is accessible with current crendentials.
-
-        Arguments
-        ---------
-        space_key
-            The key of the space.
-
-        Returns
-        -------
-        bool
-            True if the space is accessible, False otherwise.
-
-        """
-        url = self._make_url(self._root_url, "wiki/api/v2/spaces")
-        async with self._client.get(url, params={"keys": space_key}) as response:
-            if response.status == 200:
-                return True
-            return False
 
     async def update_page_async(
         self, page_id, page_title, page_content, parent_id=None

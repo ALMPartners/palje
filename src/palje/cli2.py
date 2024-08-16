@@ -17,6 +17,14 @@ from palje.cli_commands.document_cmd import document_db_to_confluence
 )
 @click.pass_context
 def cli(ctx: click.Context, yes_to_all: bool = False):
+    """
+    palje provides a set of commands to interact with Confluence and MSSQL databases.
+
+    With palje commands you can e.g. generate Confluence documentation from databases
+    and manage content in Confluence.
+
+    Use `palje2 COMMAND --help` to see more information on a specific command.
+    """
     ctx.ensure_object(dict)
     ctx.obj["yes_to_all"] = yes_to_all
 

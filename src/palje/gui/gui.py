@@ -7,6 +7,7 @@ from tkinter import messagebox
 from pathlib import Path
 import sys
 
+from palje.confluence.confluence_ops import is_page_creation_allowed_async
 from palje.confluence.confluence_rest import (
     ConfluenceRestClientAsync,
     ConfluenceRESTError,
@@ -255,27 +256,29 @@ class Main(ttk.Frame):
         self._refresh_button_states()
 
     async def _test_confluence_connection(self) -> None:
-        async with ConfluenceRestClientAsync(
-            self._confluence_widget.confluence_root_url,
-            self._confluence_widget.confluence_user_id,
-            self._confluence_widget.confluence_api_token,
-        ) as confluence_client:
-            # FIXME: seems to give positive results with nonsense space key
-            space_accessible = await confluence_client.test_space_access(
+        try:
+            space_writable = await is_page_creation_allowed_async(
+                confluence_url=self._confluence_widget.confluence_root_url,
+                uid=self._confluence_widget.confluence_user_id,
+                api_token=self._confluence_widget.confluence_api_token,
                 space_key=self._confluence_widget.confluence_space_key,
             )
-            if not space_accessible:
-                messagebox.showerror(
-                    "Connection error",
-                    "There were problems while trying to access the space in "
-                    + "Confluence.",
-                )
-            else:
-                messagebox.showinfo(
-                    "Connection OK",
-                    "Connection to the Confluence space with given parameters "
-                    + "seems to work OK.",
-                )
+        except ConfluenceRESTError as e:
+            messagebox.showerror(
+                "Connection error",
+                f"Connection error: {e}",
+            )
+            return
+        if not space_writable:
+            messagebox.showerror(
+                "Connection error",
+                "The space doesn't allow page creation with current credentials.",
+            )
+        else:
+            messagebox.showinfo(
+                "Connection OK",
+                "Connection to the Confluence with given paramters seems to work OK.",
+            )
 
     def _on_test_confluence_connection_clicked(self) -> None:
         self._set_input_state(enabled=False)

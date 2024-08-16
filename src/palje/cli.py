@@ -13,6 +13,7 @@ import sys
 from argparse import ArgumentParser
 from typing import Any
 
+from palje.confluence.confluence_ops import is_page_creation_allowed_async
 from palje.version import __version__ as PALJE_VERSION
 from palje.confluence.confluence_rest import (
     ConfluenceRestClientAsync,
@@ -63,6 +64,10 @@ def print_progress(progress: ProgressTracker):
 
 
 async def main_async(argv: list[str] | None = None):
+    print(
+        "\x1b[33;20mUsing legacy palje CLI. Consider switching to palje2 with more "
+        + "features. Use 'palje2 --help' to learn more.\x1b[0m"
+    )
     # TODO: possibility to read params from config?
     (
         confluence_url,
@@ -121,22 +126,30 @@ async def main_async(argv: list[str] | None = None):
 
     progress_tracker = ProgressTracker(on_step_callback=print_progress)
 
+    try:
+        space_writable = await is_page_creation_allowed_async(
+            confluence_url=confluence_url,
+            uid=confluence_user_id,
+            api_token=confluence_api_token,
+            space_key=space_key,
+        )
+    except Exception as e:
+        print("Confluence error: ", e)
+        quit()
+
+    if not space_writable:
+        print(
+            f"Can't access Confluence space {space_key} with given credentials."
+            + f" Check your credentials, Confluence URL and space key."
+        )
+        quit()
+
     async with ConfluenceRestClientAsync(
         confluence_url,
         confluence_user_id,
         confluence_api_token,
         progress_callback=progress_tracker.step,
     ) as confluence_client:
-        space_accessible = await confluence_client.test_space_access(
-            space_key=space_key
-        )
-        if not space_accessible:
-            print(
-                f"Can't access Confluence space {space_key} with given credentials."
-                + f" Check your credentials, Confluence URL and space key."
-            )
-            quit()
-
         await document_db_to_confluence_async(
             confluence_client=confluence_client,
             db_client=database_client,
@@ -223,7 +236,7 @@ def parse_arguments(args):
         args.get("schemas"),
         args.get("dependent"),
         args.get("db_driver", "ODBC Driver 17 for SQL Server"),
-        MSSQLDatabaseAuthType[args.get("authentication", "SQL")],
+        MSSQLDatabaseAuthType(args.get("authentication", "SQL")),
         args.get("max_concurrency", None),
     )
 

@@ -1,12 +1,146 @@
 """ Higher level Confluence operations that build on ConfluenceRestClientAsync. """
 
+from __future__ import annotations
 import asyncio
+from palje.confluence.confluence_models import ConfluencePage, ConfluencePageHierarchy
 from palje.confluence.confluence_rest import (
     ConfluenceOperation,
     ConfluenceRestClientAsync,
     ConfluenceResourceType,
 )
 from palje.progress_tracker import ProgressTracker
+
+# region PAGE HIERARCHIES
+
+
+async def get_confluence_page_hierarchy_async(
+    confluence_url: str,
+    uid: str,
+    api_token: str,
+    page_id: int,
+    progress_tracker: ProgressTracker | None = None,
+) -> ConfluencePageHierarchy:
+    """Get a hierarchy of Confluence pages.
+
+    Arguments
+    ---------
+
+    confluence_url : str
+        The root URL of the Confluence server.
+
+    uid : str
+        The Atlassian user id of the user.
+
+    api_token : str
+        Atlassian API token of the user.
+
+    page_id : int
+        The ID of the root page.
+
+    progress_tracker : ProgressTracker, optional
+        An optional progress tracker.
+
+    Returns
+    -------
+
+    ConfluencePageHierarchy
+        A hierarchy of Confluence pages.
+
+    """
+    async with ConfluenceRestClientAsync(
+        confluence_url,
+        uid,
+        api_token,
+        progress_callback=progress_tracker.step if progress_tracker else None,
+    ) as confluence_client:
+        root_page = await confluence_client.get_page_by_id_async(page_id)
+        parent_page = ConfluencePage(
+            id=root_page.id,
+            title=root_page.title,
+            child_pages=[],
+        )
+        await _recursively_expand_child_pages_async(
+            confluence_client, parent_page, progress_tracker
+        )
+        return ConfluencePageHierarchy(root_page=parent_page)
+
+
+def _create_child_page_expander_tasks(
+    confluence_client: ConfluenceRestClientAsync,
+    pages: list[ConfluencePage],
+    progress_tracker: ProgressTracker | None = None,
+):
+    """Create async tasks for expanding child pages.
+
+    Arguments
+    ---------
+    confluence_client : ConfluenceRestClientAsync
+        The Confluence client.
+
+    pages : list[ConfluencePage]
+        A list pages to expand.
+
+    progress_tracker : ProgressTracker, optional
+        An optional progress tracker.
+
+    Returns
+    -------
+
+    tasks : list[Coroutine]
+        A list of async tasks.
+
+    """
+    tasks = []
+    for page in pages:
+        tasks.append(
+            _recursively_expand_child_pages_async(
+                confluence_client=confluence_client,
+                parent_page=page,
+                progress_tracker=progress_tracker,
+            )
+        )
+    return tasks
+
+
+async def _recursively_expand_child_pages_async(
+    confluence_client: ConfluenceRestClientAsync,
+    parent_page: ConfluencePage,
+    progress_tracker: ProgressTracker | None = None,
+) -> None:
+    """Recursively expand given ConfluencePage with all its underlying children.
+
+    Arguments
+    ---------
+
+    confluence_client : ConfluenceRestClientAsync
+        The Confluence client.
+
+    parent_page : ConfluencePage
+        The parent page to expand.
+
+    progress_tracker : ProgressTracker, optional
+        An optional progress tracker.
+
+    """
+    child_pages = await confluence_client.get_child_pages_async(parent_page.id)
+    if progress_tracker:
+        progress_tracker.target_total += len(child_pages)
+
+    for child_page in child_pages:
+        page = ConfluencePage(id=child_page.id, title=child_page.title, child_pages=[])
+        parent_page._child_pages.append(page)
+
+    tasks = _create_child_page_expander_tasks(
+        confluence_client=confluence_client,
+        pages=parent_page._child_pages,
+        progress_tracker=progress_tracker,
+    )
+    await asyncio.gather(*tasks)
+
+
+# endregion
+
+# region PERMISSION CHECKS
 
 
 async def is_page_deletion_allowed_async(
@@ -99,14 +233,56 @@ async def is_page_creation_allowed_async(
         } in permitted_ops
 
 
-async def get_confluence_page_id_by_title(
+# endregion Permission checks
+
+# region SINGLE PAGE RETRIEVAL
+
+
+async def get_confluence_page_by_id(
+    confluence_url: str,
+    uid: str,
+    api_token: str,
+    page_id: int,
+) -> ConfluencePage:
+    """Get a Confluence page by ID.
+
+    Arguments
+    ---------
+
+    confluence_url : str
+        The root URL of the Confluence server.
+
+    uid : str
+        The Atlassian user id of the user.
+
+    api_token : str
+        Atlassian API token of the user.
+
+    page_id : int
+        The ID of the page.
+
+    Returns
+    -------
+
+    ConfluencePage
+        The Confluence page.
+
+    """
+    async with ConfluenceRestClientAsync(
+        confluence_url, uid, api_token
+    ) as confluence_client:
+        page_data = await confluence_client.get_page_by_id_async(page_id)
+        return ConfluencePage(id=page_data.id, title=page_data.title, child_pages=[])
+
+
+async def get_confluence_page_by_title(
     confluence_url: str,
     uid: str,
     api_token: str,
     page_title: str,
     space_key: str,
-) -> int:
-    """Get the ID of a Confluence page by title and space key.
+) -> ConfluencePage:
+    """Get a Confluence page by title and space key.
 
     Arguments
     ---------
@@ -127,164 +303,35 @@ async def get_confluence_page_id_by_title(
 
     Returns
     -------
-    int
-        The ID of the page.
+    ConfluencePage
+        Details of the Confluence page with the given title and space key.
 
     """
     async with ConfluenceRestClientAsync(
         confluence_url, uid, api_token
     ) as confluence_client:
         space_id = await confluence_client.get_space_id_async(space_key)
-        return await confluence_client.get_page_id_async(
+        page_result = await confluence_client.get_page_by_title_async(
             space_id=space_id, page_title=page_title
         )
-
-
-async def get_nested_confluence_page_ids_async(
-    confluence_url: str,
-    uid: str,
-    api_token: str,
-    parent_page_id: int,
-    progress_tracker: ProgressTracker | None = None,
-) -> None:
-    """Get the IDs of a page and all its children recursively.
-
-    Arguments
-    ---------
-
-    confluence_url : str
-        The root URL of the Confluence server.
-
-    uid : str
-        The Atlassian user id of the user.
-
-    api_token : str
-        Atlassian API token of the user.
-
-    parent_page_id : int
-        The ID of the parent page.
-
-    progress_tracker : ProgressTracker, optional
-        An optional progress tracker.
-
-
-    Returns
-    -------
-
-    page_ids : list[int]
-        A list of page IDs.
-
-    """
-    async with ConfluenceRestClientAsync(
-        confluence_url,
-        uid,
-        api_token,
-        progress_callback=progress_tracker.step if progress_tracker else None,
-    ) as confluence_client:
-        recursive_children = await get_recursive_confluence_child_page_ids_async(
-            confluence_client, parent_page_id, progress_tracker=progress_tracker
+        return ConfluencePage(
+            id=page_result.id, title=page_result.title, child_pages=[]
         )
-        page_ids = [int(child) for child in recursive_children]
-        page_ids.append(parent_page_id)
-    return page_ids
 
 
-def create_page_child_page_finder_tasks(
-    confluence_client: ConfluenceRestClientAsync,
-    page_ids: list[int],
-    results: list[int],
-    progress_tracker: ProgressTracker | None = None,
-):
-    """Create a list of async tasks for finding child pages.
+# endregion
 
-    Arguments
-    ---------
-    confluence_client : ConfluenceRestClientAsync
-        The Confluence client.
-
-    page_ids : list[int]
-        A list of page IDs to find child pages for.
-
-    results : list[int]
-        A list to store the results.
-
-    progress_tracker : ProgressTracker, optional
-        An optional progress tracker.
-
-    Returns
-    -------
-
-    tasks : list[Coroutine]
-        A list of async tasks.
-
-    """
-    tasks = []
-    for page_id in page_ids:
-        tasks.append(
-            get_recursive_confluence_child_page_ids_async(
-                confluence_client, page_id, results, progress_tracker
-            )
-        )
-    return tasks
-
-
-# TODO: move to client?
-async def get_recursive_confluence_child_page_ids_async(
-    confluence_client: ConfluenceRestClientAsync,
-    parent_page_id: int,
-    results: list[int] | None = None,
-    progress_tracker: ProgressTracker | None = None,
-) -> list[int]:
-    """Recursively find all child page ids for a page.
-
-    Arguments
-    ---------
-
-    confluence_client : ConfluenceRestClientAsync
-        The Confluence client.
-
-    parent_page_id : int
-        The ID of the parent page.
-
-    results : list[int], optional
-        A list to store the results. Leave empty to create a new list.
-
-    progress_tracker : ProgressTracker, optional
-        An optional progress tracker.
-
-    Returns
-    -------
-    list[int]
-        A list of page IDs.
-
-    """
-    results = results or []
-    child_page_ids = await confluence_client.get_child_page_ids_async(parent_page_id)
-    if progress_tracker:
-        progress_tracker.target_total += len(child_page_ids)
-
-    for page_id in child_page_ids:
-        results.append(page_id)
-
-    pf_tasks = create_page_child_page_finder_tasks(
-        confluence_client=confluence_client,
-        page_ids=child_page_ids,
-        results=results,
-        progress_tracker=progress_tracker,
-    )
-    await asyncio.gather(*pf_tasks)
-
-    return results
+# region PAGE DELETION
 
 
 async def delete_confluence_pages(
     confluence_url: str,
     uid: str,
     api_token: str,
-    page_ids: list[int],
+    pages: list[ConfluencePage],
     progress_tracker: ProgressTracker | None = None,
 ) -> None:
-    """Delete a list of Confluence pages.
+    """Delete all Confluence pages in given ConfluencePageHierarchy.
 
     Arguments
     ---------
@@ -298,15 +345,15 @@ async def delete_confluence_pages(
     api_token : str
         Atlassian API token of the user.
 
-    page_ids : list[int]
-        A list of page IDs to delete.
+    pages : list[ConfluencePage]
+        List of pages to delete.
 
     progress_tracker : ProgressTracker, optional
         An optional progress tracker.
 
     """
     if progress_tracker:
-        progress_tracker.target_total = len(page_ids)
+        progress_tracker.target_total = len(pages)
 
     async with ConfluenceRestClientAsync(
         confluence_url,
@@ -326,18 +373,20 @@ async def delete_confluence_pages(
         # Maybe the parallel page deletion could be ran 2-3 times in a row (for pages
         # resulting in 500s) to ensure that all pages get deleted eventually?
         #
-        # tasks = create_page_deletion_tasks(confluence_client, page_ids)
+        # tasks = create_page_deletion_tasks(confluence_client, pages)
         # await asyncio.gather(*tasks)
         #
-        for page_id in page_ids:
-            await confluence_client.delete_page_async(page_id)
+        for page in pages:
+            await confluence_client.delete_page_async(page)
 
 
 # def create_page_deletion_tasks(
-#     confluence_client: ConfluenceRestClientAsync, page_ids: list[int]
+#     confluence_client: ConfluenceRestClientAsync, pages: list[ConfluencePage]
 # ) -> list[Coroutine]:
 #     """Create a list of async tasks for deleting pages."""
 #     tasks = []
-#     for page_id in page_ids:
-#         tasks.append(confluence_client.delete_page_async(page_id))
+#     for page in pages:
+#         tasks.append(confluence_client.delete_page_async(page.page_id))
 #     return tasks
+
+# endregion
