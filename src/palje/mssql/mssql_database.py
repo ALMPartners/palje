@@ -24,6 +24,14 @@ SQL_COPT_SS_ACCESS_TOKEN = (
 )
 
 
+class DatabaseConnectionError(Exception):
+    """Exception for failures related to database connection."""
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__(self.message)
+
+
 class MSSQLDatabaseAuthType(Enum):
     SQL = "SQL"
     WINDOWS = "Windows"
@@ -127,11 +135,10 @@ class MSSQLDatabase:
         """Close the database connection."""
         try:
             self._connection.close()
-        except:
-            print(
-                "Failed to close the database connection. "
-                + "Most likely because the connection is already closed."
-            )
+        except Exception as ex:
+            raise DatabaseConnectionError(
+                f"Failed to close the database connection. {ex}"
+            ) from ex
 
     def connect(self) -> None:
         """Connect to the database."""
@@ -144,29 +151,46 @@ class MSSQLDatabase:
             else:
                 self._connection = pyodbc.connect(self.connection_string)
         except Exception as ex:
-            print(
-                f"Failed to connect to {self._server_addr}.{self._database}. "
-                + "Check server details, username and password."
-            )
-            raise ex
+            raise DatabaseConnectionError(
+                f"Failed to connect to {self._server_addr}.{self._database}. {ex}"
+            ) from ex
 
     def change_current_db(self, db_name: str) -> None:
-        """Change the current database."""
+        """Change the current database.
 
-        # FIXME: This does NOT work with AzureSQL databases
-        #        (a direct connection is needed to change the database)
-        if self._connection is None:
-            self.connect()
-        cursor = self._connection.cursor()
-        try:
-            # TODO: sanitize db_name?
-            # Apparently default sanitization (?, db_name) is not supported for
-            # this kind of query.
-            cursor.execute(f"USE {db_name}")
+        Arguments
+        ---------
+
+        db_name : str
+            Name of the database to switch to.
+
+        Raises
+        ------
+
+        DatabaseConnectionError
+            If the database switch fails
+
+        """
+
+        if self._authentication == MSSQLDatabaseAuthType.AAD:
+            # AZSQL does not support "USE", needs reconnection instead
+            if self._connection is not None:
+                self._connection.close()
+                self._connection = None
             self._database = db_name
-        except pyodbc.Error as ex:
-            print(f"Failed to change database to {db_name}")
-            raise ex
+            self.connect()
+        else:
+            if self._connection is None:
+                self.connect()
+            cursor = self._connection.cursor()
+            try:
+                # TODO: sanitize db_name?
+                # Apparently default sanitization (?, db_name) is not supported for
+                # this kind of query.
+                cursor.execute(f"USE {db_name}")
+                self._database = db_name
+            except pyodbc.Error as ex:
+                raise DatabaseConnectionError(f"{ex}") from ex
 
     @property
     def database(self) -> str:

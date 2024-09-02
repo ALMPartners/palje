@@ -96,14 +96,14 @@ def _display_progress(pt: ProgressTracker):
     "--db-username",
     help="Login username for the SQL Server, if needed by the auth type. Optionally"
     + " read from env var PALJE_DB_USERNAME."
-    + " Prompted for if not available at runtime.",
+    + " Prompted for if required and not available at runtime.",
     default=lambda: os.environ.get("PALJE_DB_USERNAME", ""),
 )
 @click.option(
     "--db-password",
     help="Login password for the SQL Server, if needed by the auth type. Optionally "
     + "read from env var PALJE_DB_PASSWORD."
-    + " Prompted for if not available at runtime.",
+    + " Prompted for if required and not available at runtime.",
     default=lambda: os.environ.get("PALJE_DB_PASSWORD", ""),
 )
 @click.option(

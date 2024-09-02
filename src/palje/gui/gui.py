@@ -247,13 +247,20 @@ class Main(ttk.Frame):
         self._refresh_button_states()
 
     def _on_db_selected(self) -> None:
-        self._mssql_database.change_current_db(
-            self._db_browser_widget.selected_database
-        )
-        available_schemas = list(set(self._mssql_database.get_schemas()))
-        available_schemas.sort()
-        self._db_browser_widget.available_schemas = available_schemas
-        self._refresh_button_states()
+        try:
+            self._mssql_database.change_current_db(
+                self._db_browser_widget.selected_database
+            )
+            available_schemas = list(set(self._mssql_database.get_schemas()))
+            available_schemas.sort()
+            self._db_browser_widget.available_schemas = available_schemas
+        except Exception as e:
+            # E.g. a sleeping AZSQL db may cause this
+            self._db_browser_widget.available_schemas = []
+            err_msg = f"Failed to change the database. {str(e)}"
+            messagebox.showerror("Database error", err_msg)
+        finally:
+            self._refresh_button_states()
 
     async def _test_confluence_connection(self) -> None:
         try:

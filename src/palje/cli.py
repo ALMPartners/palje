@@ -29,13 +29,14 @@ def _ask_db_credentials(
     server: str, database: str, authentication: MSSQLDatabaseAuthType
 ) -> tuple[str, str]:
     """Ask the user for database credentials"""
-    if authentication == MSSQLDatabaseAuthType.WINDOWS:
+    if authentication in [
+        MSSQLDatabaseAuthType.WINDOWS,
+        MSSQLDatabaseAuthType.AAD,
+        MSSQLDatabaseAuthType.AZURE_IDENTITY,
+    ]:
         return ("", "")
     uid = input(f"Username for {server}.{database}: ")
-    if authentication == MSSQLDatabaseAuthType.AAD:
-        pwd = ""
-    else:
-        pwd = getpass.getpass(f"Password for user {uid}: ")
+    pwd = getpass.getpass(f"Password for user {uid}: ")
     return (uid, pwd)
 
 
@@ -223,7 +224,7 @@ def parse_arguments(args):
     parser.add_argument(
         "--version",
         action="version",
-        version=f"Palje GUI v{PALJE_VERSION}",
+        version=f"Palje v{PALJE_VERSION} (legacy CLI)",
     )
 
     args = vars(parser.parse_args(args))

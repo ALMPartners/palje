@@ -6,6 +6,7 @@ from tkinter import font
 # TODO: check port requirement for Entra MFA
 # TODO: handle whitepace inputs (strip on getters?)
 
+
 class DBServerConnectionState(enum.Enum):
     NOT_CONNECTED = enum.auto()
     CONNECTING = enum.auto()
@@ -28,10 +29,8 @@ class DbServerWidget(ttk.Frame):
     SUPPORTED_AUTHENTICATIONS = [
         {
             "value": "AAD",
-            "available_fields": ["server", "username", "db_name"],
-            # Notice: AZSQL db's can be _listed_ without a db_name but changing
-            # to USE one requires reconnecting to it directly -> db_name is required
-            "required_fields": ["server", "username", "db_name"],
+            "available_fields": ["server", "db_name"],
+            "required_fields": ["server"],
             "display_name": "Microsoft Entra MFA",
         },
         {
@@ -128,7 +127,7 @@ class DbServerWidget(ttk.Frame):
             state="readonly",
         )
         auth_combo.grid(row=row, column=1, sticky=tk.EW)
-        
+
         row += 1
         username_label = ttk.Label(db_frame, text="Username")
         username_label.grid(row=row, column=0, sticky=tk.E, ipadx=self.PADDING_PX)
