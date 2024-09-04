@@ -127,11 +127,20 @@ def _display_progress(pt: ProgressTracker):
     + "Use multiple times to specify multiple databases.",
 )
 @click.option(
+    "--use-concurrency",
+    default=False,
+    is_flag=True,
+    show_default=True,
+    help="Improve performance by creating/updating multiple pages at the same time. "
+    + "Unfortunately this effectively puts new pages in random order. Confluence REST "
+    + "API doesn't support re-arranging of pages (CONFCLOUD-40101).",
+)
+@click.option(
     "--max-concurrency",
     default=2,
     show_default=True,
     help="Concurrency limit. Higher number may improve performance but can also lead "
-    + "to unexpected failures.",
+    + "to unexpected failures. Only has effect with --use-concurrency.",
 )
 def document_db_to_confluence(
     confluence_root_url: str,
@@ -147,6 +156,7 @@ def document_db_to_confluence(
     parent_page_title: str,
     schema: tuple[str, ...],
     dependency_db: tuple[str, ...],
+    use_concurrency: bool,
     max_concurrency: int,
 ) -> int:
     """Document database objects to Confluence.
@@ -193,6 +203,9 @@ def document_db_to_confluence(
 
     dependency_db : tuple[str, ...]
         The databases where object dependencies are sought.
+
+    use_concurrency : bool
+        Use concurrency to improve performance. Notice: page order will be random!
 
     max_concurrency : int
         The maximum concurrency of the operation.
@@ -308,6 +321,7 @@ def document_db_to_confluence(
                 list(set(schema)),
                 list(set(dependency_db)),
                 progress_tracker,
+                use_concurrency,
                 max_concurrency,
             )
         )
@@ -343,6 +357,7 @@ async def _do_document_db(
     schema: tuple[str, ...],
     dependency_db: tuple[str, ...],
     progress_tracker: ProgressTracker,
+    use_concurrency: bool,
     max_concurrency: int,
 ):
     async with ConfluenceRestClientAsync(
@@ -359,5 +374,6 @@ async def _do_document_db(
             schemas=list(set(schema)),
             additional_databases=list(set(dependency_db)),
             progress_tracker=progress_tracker,
+            use_concurrency=use_concurrency,
             max_concurrency=max_concurrency,
         )

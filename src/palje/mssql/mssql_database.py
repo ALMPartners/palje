@@ -246,7 +246,7 @@ class MSSQLDatabase:
             # database procedure and function schemas
             cursor.execute(self._queries["routine_schemas"])
             routine_schemas = [schema.schema_routine for schema in cursor.fetchall()]
-            return table_schemas + routine_schemas
+            return sorted(table_schemas + routine_schemas)
         finally:
             cursor.close()
 
@@ -275,7 +275,11 @@ class MSSQLDatabase:
                 for routine in cursor.fetchall()
                 if routine.ROUTINE_TYPE in DATABASE_OBJECT_TYPES
             ]
-            return tables + routines
+            all_items = routines + tables
+            all_items.sort(
+                key=lambda x: "TABLE" if x["type"] == "BASE TABLE" else x["type"]
+            )
+            return all_items
         finally:
             cursor.close()
 

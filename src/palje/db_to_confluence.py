@@ -21,6 +21,7 @@ async def document_db_to_confluence_async(
     schemas: list[str] | None = None,
     additional_databases: list[str] | None = None,
     progress_tracker: ProgressTracker | None = None,
+    use_concurrency: bool = False,
     max_concurrency: int = DEFAULT_CONCURRENCY_LIMIT,
 ) -> None:
     """Collect documentation from the database and upload it to Confluence.
@@ -50,9 +51,16 @@ async def document_db_to_confluence_async(
     progress_tracker : ProgressTracker, optional
         Progress tracker instance. If not given, progress is not tracked.
 
+    use_concurrency : bool, optional
+        Whether to use concurrency at all. Using concurrency is much more performant
+        but unfortunately it effectively puts new pages in random order in Confluence.
+        Existing pages keep their positions. Unfortunately Confluence REST API doesn't
+        support re-arranging of pages (see Confluence ticket CONFCLOUD-40101).
+
     max_concurrency : int, optional
         Concurrency limit. Limits async task creation but even with value 1
         there is still some concurrency. Large values may overload the database.
+        Only takes effect with use_concurrency set to True.
 
     """
 
@@ -91,9 +99,15 @@ async def document_db_to_confluence_async(
             object_dependencies,
             root_page_id,
             progress_tracker=progress_tracker,
+            use_concurrency=use_concurrency,
             max_concurrency=max_concurrency,
         )
-        await asyncio.gather(*tasks)
+
+        if use_concurrency:
+            await asyncio.gather(*tasks)
+        else:
+            for task in tasks:
+                await task
 
 
 def create_async_subpage_upsert_tasks(
@@ -104,6 +118,7 @@ def create_async_subpage_upsert_tasks(
     object_dependencies: dict[str, list[str]],
     root_page_id: int,
     progress_tracker: ProgressTracker | None = None,
+    use_concurrency: bool = False,
     max_concurrency: int = DEFAULT_CONCURRENCY_LIMIT,
 ) -> list[Coroutine]:
     """Create async co-routines for creating or updating subpages for each
@@ -133,11 +148,15 @@ def create_async_subpage_upsert_tasks(
     progress : ProgressTracker, optional
         Progress tracker instance. If not given, progress is not tracked.
 
+    use_concurrency : bool, optional
+        Whether to use concurrency.
+
+    max_concurrency : int, optional
+        Maximum number of concurrent tasks. Only takes effect with use_concurrency.
+
     """
 
     tasks = []
-    # TODO: makes no sense to have the semaphore here; it should (mainly) limit
-    #       the db queries, not the confluence writes
     semaphore = asyncio.Semaphore(max_concurrency)
     for schema in schemas:
         tasks.append(
@@ -150,6 +169,7 @@ def create_async_subpage_upsert_tasks(
                 object_dependencies,
                 root_page_id,
                 progress_tracker=progress_tracker,
+                use_concurrency=use_concurrency,
             )
         )
     return tasks
@@ -223,6 +243,7 @@ async def create_or_update_subpages_async(
     object_dependencies: dict[str, list[str]],
     root_page_id: int,
     progress_tracker: ProgressTracker | None = None,
+    use_concurrency: bool = False,
 ):
     """Create or update subpages for the given schema.
 
@@ -252,6 +273,9 @@ async def create_or_update_subpages_async(
 
     progress : ProgressTracker, optional
         Progress tracker instance. If not given, progress is not tracked.
+
+    use_concurrency : bool, optional
+        Whether to use concurrency.
 
     """
 
@@ -307,7 +331,11 @@ async def create_or_update_subpages_async(
             if progress_tracker:
                 progress_tracker.target_total += len(tasks)
 
-            await asyncio.gather(*tasks)
+            if use_concurrency:
+                await asyncio.gather(*tasks)
+            else:
+                for task in tasks:
+                    await task
 
 
 # endregion
@@ -339,7 +367,7 @@ def collect_schemas_to_document(
         schemas = list(set(schemas))
     else:
         schemas = list(set(all_schemas))  # unique database schemas
-    return schemas
+    return sorted(schemas)
 
 
 # TODO: filter -> name better, make optional last parm
