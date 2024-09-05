@@ -14,7 +14,9 @@ class DBServerConnectionState(enum.Enum):
 
 
 class DbServerWidget(ttk.Frame):
-    """A widget for configuring database connection settings. Emits events when the connection settings change or when the connect/disconnect button is clicked."""
+    """A widget for configuring database connection settings.
+    Emits events  when the connection settings change or when the connect/disconnect
+    button is clicked."""
 
     _connection_state: DBServerConnectionState
     _server: tk.StringVar
@@ -236,7 +238,8 @@ class DbServerWidget(ttk.Frame):
             self._update_connect_button_for_connection_state()
 
     def _update_connect_button_for_connection_state(self) -> None:
-        """Sets the text and command of the connect button based on the current connection state"""
+        """Sets the text and command of the connect button based on the current
+        connection state"""
         match self.connection_state:
             case DBServerConnectionState.NOT_CONNECTED:
                 self._connect_button.config(
@@ -253,7 +256,8 @@ class DbServerWidget(ttk.Frame):
                 self.set_connect_button_state(enabled=True)
 
     def _update_inputs_for_auth_method(self, auth_method: str) -> None:
-        """Enables/disables input fields based on the selected authentication method. Clears values from fields that are not available for the selected method."""
+        """Enables/disables input fields based on the selected authentication method.
+        Clears values from fields that are not available for the selected method."""
         auth_item = self.get_auth_item_by_display_name(auth_method)
         for field_name, input_tuple in self._fields_and_values.items():
             if field_name in ["auth_method", "driver"]:
@@ -296,7 +300,7 @@ class DbServerWidget(ttk.Frame):
 
     @property
     def driver(self) -> str:
-        return self._driver.get()
+        return self._driver.get().strip()
 
     @driver.setter
     def driver(self, value: str) -> None:
@@ -304,7 +308,7 @@ class DbServerWidget(ttk.Frame):
 
     @property
     def server(self) -> str:
-        return self._server.get()
+        return self._server.get().strip()
 
     @server.setter
     def server(self, value: str) -> None:
@@ -324,7 +328,7 @@ class DbServerWidget(ttk.Frame):
     def db_name(self) -> str | None:
         if self._fields_and_values["db_name"][0].cget("state") == tk.DISABLED:
             return None
-        return self._db_name.get()
+        return self._db_name.get().strip()
 
     @db_name.setter
     def db_name(self, value: str) -> None:
@@ -334,7 +338,7 @@ class DbServerWidget(ttk.Frame):
     def username(self) -> str | None:
         if self._fields_and_values["username"][0].cget("state") == tk.DISABLED:
             return None
-        return self._username.get()
+        return self._username.get().strip()
 
     @username.setter
     def username(self, value: str) -> None:
@@ -344,7 +348,7 @@ class DbServerWidget(ttk.Frame):
     def password(self) -> str | None:
         if self._fields_and_values["password"][0].cget("state") == tk.DISABLED:
             return None
-        return self._password.get()
+        return self._password.get().strip()
 
     @password.setter
     def password(self, value: str) -> None:
