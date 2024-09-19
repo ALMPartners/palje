@@ -25,6 +25,13 @@ steps:
       python -m pip wheel . -w dist --no-deps
     displayName: "Build release artefacts"
 
+  - bash: |
+      set -ex
+      source venv_msi_build/scripts/activate
+      pip install ahjo pytest pytest-azurepipelines
+      pytest test/ --test-run-title="Palje pytest"
+    displayName: "Palje pytest"
+
   - task: DotNetCoreCLI@2
     inputs:
       command: 'custom'
