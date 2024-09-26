@@ -84,14 +84,15 @@ See the CLI documentation below for information on various parameters - it all a
 
 ## CLI and arguments (current palje2 version)
 
-In comparison to `palje`, the new `palje2` CLI is more flexible and adds more features for managing Confluence documentation e.g. deletion of Confluence page hierarchies.
+In comparison to `palje`, the new `palje2` CLI is more flexible and adds more features. For example, there
+are features for deleting and alphabetically sorting existing Confluence pages.
 
-See online help for up-to-date documentation for available options and sub-commands.
+See online help for up-to-date documentation for top-level options and sub-commands.
 ```
 palje2 --help
 ```
 
-To see specific documentation for a sub-command, use the -h/--help switch after the sub-command e.g.
+To see specific documentation for a sub-command, use the --help switch _after_ the sub-command e.g.
 
 ```
 palje2 document --help
@@ -100,13 +101,13 @@ palje2 delete --help
 
 ### Parameters from ENV vars
 
-With `palje2` many parameters (e.g. Confluence authentication params) can be set into ENV variables from where they are automatically read at runtime. This makes continous use more user-friendly: less repetative typing, shorter and clearer commands, sensitive data stays out of sight, ...
+With `palje2` many parameters (e.g. Confluence authentication params) can be set into ENV variables from where they are automatically read at runtime. This makes continous use more user-friendly: less repetative typing, shorter and clearer commands, sensitive data stays out of sight, etc.
 
 Notice that using ENV vars is optional: alternatively you can type parameters on the command line and/or leave them off and let `palje2` interactively prompt for any required parameter values.
 
 See the online-documentation for supported ENV vars and their exact names.
 
-Example of setting ENV vars in PowerShell:
+Example of setting some ENV vars in PowerShell:
 
 ```
 $env:PALJE_ATLASSIAN_USER_ID = "firstname.lastname@organization.org"
@@ -115,10 +116,29 @@ $env:PALJE_DB_SERVER = "localhost,14330"
 ...
 ```
 
-If you want to unset an ENV var, you can do it like:
+If you want to unset an ENV var in PowerShell, you can do it by setting its value to `$null`:
 
 ```
 $env:PALJE_DB_PASSWORD = $null
+```
+
+### Experimental features
+
+There may be some features in `palje2` that are somewhat usable but known to be still incomplete or unreliable in some cases e.g. due to unresolved issues with Confluence API.
+
+By default, these experimental features are hidden from the user and not available in regular use.
+
+To make experimental features available, set some value to the special `PALJE_EXPERIMENTAL_FEATURES_ENABLED` enviroment variable.
+
+```
+PS > $env:PALJE_EXPERIMENTAL_FEATURES_ENABLED = "1"
+PS > palje2 --help
+Experimental features enabled.
+Usage: palje2 [OPTIONS] COMMAND [ARGS]...
+...
+Commands:
+  copy      Experimental: Copy pages or page hierarchies between...
+...
 ```
 
 ## CLI and arguments (legacy version)

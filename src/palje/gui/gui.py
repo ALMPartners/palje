@@ -264,12 +264,15 @@ class Main(ttk.Frame):
 
     async def _test_confluence_connection(self) -> None:
         try:
-            space_writable = await is_page_creation_allowed_async(
-                confluence_url=self._confluence_widget.confluence_root_url,
-                uid=self._confluence_widget.confluence_user_id,
-                api_token=self._confluence_widget.confluence_api_token,
-                space_key=self._confluence_widget.confluence_space_key,
-            )
+            async with ConfluenceRestClientAsync(
+                self._confluence_widget.confluence_root_url,
+                self._confluence_widget.confluence_user_id,
+                self._confluence_widget.confluence_api_token,
+            ) as confluence_client:
+                space_writable = await is_page_creation_allowed_async(
+                    confluence_client,
+                    space_key=self._confluence_widget.confluence_space_key,
+                )
         except ConfluenceRESTError as e:
             messagebox.showerror(
                 "Connection error",

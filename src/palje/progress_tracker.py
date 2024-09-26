@@ -41,9 +41,11 @@ class ProgressTracker:
         return round(100.0 * self.completed / float(self.target_total), 1)
 
     @property
-    def message(self) -> str | None:
+    def message(self) -> str:
         """The most recent message that came in via step function."""
-        return self._message
+        if self._message:
+            return self._message
+        return ""
 
     @property
     def elapsed_time(self) -> float:

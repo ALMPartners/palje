@@ -291,27 +291,12 @@ def document_db_to_confluence(
             + f"Did you mean '{suggested_db}'?"
         )
 
-    click.echo(f"Checking Confluence permissions for page creation ... ", nl=False)
-    is_writable_space = asyncio.run(
-        is_page_creation_allowed_async(
-            confluence_root_url,
-            atlassian_user_id,
-            atlassian_api_token,
-            confluence_space_key,
-        )
-    )
-    click.echo("OK" if is_writable_space else "FAILED")
-    if not is_writable_space:
-        raise click.ClickException(
-            f"Space key#{confluence_space_key} doesn't allow page creation."
-        )
-
     progress_tracker = ProgressTracker(on_step_callback=_display_progress)
 
     ret_val = 0
     try:
         asyncio.run(
-            _do_document_db(
+            _document_db_to_confluence_async(
                 confluence_root_url,
                 atlassian_user_id,
                 atlassian_api_token,
@@ -346,8 +331,7 @@ def document_db_to_confluence(
     return ret_val
 
 
-# TODO: move this away from here, maybe into confluence_ops.py
-async def _do_document_db(
+async def _document_db_to_confluence_async(
     confluence_root_url: str,
     atlassian_user_id: str,
     atlassian_api_token: str,
@@ -366,6 +350,16 @@ async def _do_document_db(
         atlassian_api_token,
         progress_callback=progress_tracker.step,
     ) as confluence_client:
+        click.echo(f"Checking Confluence permissions for page creation ... ", nl=False)
+        is_writable_space = await is_page_creation_allowed_async(
+            confluence_client=confluence_client, space_key=confluence_space_key
+        )
+        click.echo("OK" if is_writable_space else "FAILED")
+        if not is_writable_space:
+            raise click.ClickException(
+                f"Space key#{confluence_space_key} doesn't allow page creation."
+            )
+
         await document_db_to_confluence_async(
             confluence_client=confluence_client,
             db_client=database_client,

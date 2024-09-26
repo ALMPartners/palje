@@ -7,13 +7,16 @@ import click
 
 # TODO: prefix https://click.palletsprojects.com/en/8.1.x/options/#values-from-environment-variables
 
-from palje.confluence.confluence_models import ConfluencePageHierarchy
 from palje.confluence.confluence_ops import (
-    delete_confluence_pages,
-    get_confluence_page_by_id,
-    get_confluence_page_by_title,
+    delete_confluence_pages_async,
+    get_confluence_page_by_id_async,
+    get_confluence_page_by_title_async,
     get_confluence_page_hierarchy_async,
     is_page_deletion_allowed_async,
+)
+from palje.confluence.confluence_rest import (
+    ConfluenceRESTNotFoundError,
+    ConfluenceRestClientAsync,
 )
 from palje.progress_tracker import ProgressTracker
 
@@ -167,91 +170,19 @@ def delete_confluence_page(
         if not page_id:
             if not confluence_space_key:
                 confluence_space_key = click.prompt("Confluence space key")
-            page_to_delete = asyncio.run(
-                get_confluence_page_by_title(
-                    confluence_root_url,
-                    atlassian_user_id,
-                    atlassian_api_token,
-                    page_title,
-                    confluence_space_key,
-                )
-            )
-        else:
-            page_to_delete = asyncio.run(
-                get_confluence_page_by_id(
-                    confluence_url=confluence_root_url,
-                    uid=atlassian_user_id,
-                    api_token=atlassian_api_token,
-                    page_id=page_id,
-                )
-            )
-        if not page_to_delete:
-            raise click.ClickException(
-                f"Couldn't fetch data for '{page_title}' in space "
-                + f"'{confluence_space_key}'."
-            )
-
-        click.echo(
-            f"Preparing deletion of page {page_to_delete}"
-            + (
-                f" in space {confluence_space_key}"
-                # when deleting directly by id, the space key is omitted
-                if confluence_space_key and page_title
-                else ""
-            )
-            + (" with all its children" if not keep_children else "")
-            + " ..."
-        )
-
-        click.echo(f"Checking Confluence permissions for page deletion ... ", nl=False)
-        page_deletion_allowed = asyncio.run(
-            is_page_deletion_allowed_async(
-                confluence_root_url,
-                atlassian_user_id,
-                atlassian_api_token,
-                page_to_delete.id,
-            )
-        )
-        click.echo("OK" if page_deletion_allowed else "FAILED")
-        if not page_deletion_allowed:
-            raise click.ClickException(
-                f"Deletion of page {page_to_delete} is not allowed."
-            )
-
-        pages_to_delete = [page_to_delete]
-
-        if keep_children:
-            page_list_str = f"  {page_to_delete}"
-        else:
-            click.echo("Finding child pages ...")
-            page_hierarchy = asyncio.run(
-                get_confluence_page_hierarchy_async(
-                    confluence_url=confluence_root_url,
-                    uid=atlassian_user_id,
-                    api_token=atlassian_api_token,
-                    page_id=page_to_delete.id,
-                    progress_tracker=page_find_pt,
-                )
-            )
-            pages_to_delete = page_hierarchy.pages
-            page_list_str = page_hierarchy.tree_str(indent=2)
-
-        if ctx and not ctx.obj["yes_to_all"]:
-            click.echo("\nPage(s) to be deleted:\n")
-            click.echo(page_list_str)
-            click.secho(
-                f"WARNING: About to delete {len(pages_to_delete)} page(s).",
-                fg="yellow",
-            )
-            click.confirm("Do you want to proceed?", abort=True)
 
         asyncio.run(
-            delete_confluence_pages(
-                confluence_url=confluence_root_url,
-                uid=atlassian_user_id,
-                api_token=atlassian_api_token,
-                pages=pages_to_delete,
-                progress_tracker=page_delete_pt,
+            _delete_confluence_page_async(
+                confluence_root_url=confluence_root_url,
+                atlassian_user_id=atlassian_user_id,
+                atlassian_api_token=atlassian_api_token,
+                page_id=page_id,
+                page_title=page_title,
+                confluence_space_key=confluence_space_key,
+                keep_children=keep_children,
+                yes_to_all=(ctx and ctx.obj["yes_to_all"]),
+                page_find_pt=page_find_pt,
+                page_delete_pt=page_delete_pt,
             )
         )
 
@@ -271,3 +202,95 @@ def delete_confluence_page(
     except Exception as e:
         click.secho(f"\nPage deletion aborted. {e}", fg="red")
         return 1
+
+
+async def _delete_confluence_page_async(
+    confluence_root_url: str,
+    atlassian_user_id: str,
+    atlassian_api_token: str,
+    page_id: int | None = None,
+    page_title: str | None = None,
+    confluence_space_key: str | None = None,
+    keep_children: bool = True,
+    yes_to_all: bool = False,
+    page_find_pt: ProgressTracker | None = None,
+    page_delete_pt: ProgressTracker | None = None,
+) -> int:
+    async with ConfluenceRestClientAsync(
+        root_url=confluence_root_url,
+        user_id=atlassian_user_id,
+        api_token=atlassian_api_token,
+    ) as confluence_client:
+        try:
+            if page_id:
+                page_to_delete = await get_confluence_page_by_id_async(
+                    confluence_client=confluence_client,
+                    page_id=page_id,
+                )
+            else:
+                page_to_delete = await get_confluence_page_by_title_async(
+                    confluence_client=confluence_client,
+                    page_title=page_title,
+                    space_key=confluence_space_key,
+                )
+        except ConfluenceRESTNotFoundError as e:
+            page_identifier = f"{page_id}" if page_id else f"'{page_title}'"
+            space_identifier = (
+                f" from space '{confluence_space_key}'"
+                if confluence_space_key and not page_id
+                else ""
+            )
+            message = f"Couldn't find page {page_identifier}" + f"{space_identifier}."
+            raise ValueError(message) from e
+
+        click.echo(
+            f"Preparing deletion of page {page_to_delete}"
+            + (
+                f" in space {confluence_space_key}"
+                # when deleting directly by id, the space key is omitted
+                if confluence_space_key and page_title
+                else ""
+            )
+            + (" with all its children" if not keep_children else "")
+            + " ..."
+        )
+
+        click.echo(f"Checking Confluence permissions for page deletion ... ", nl=False)
+        page_deletion_allowed = await is_page_deletion_allowed_async(
+            confluence_client=confluence_client,
+            page_id=page_to_delete.id,
+        )
+        click.echo("OK" if page_deletion_allowed else "FAILED")
+        if not page_deletion_allowed:
+            raise click.ClickException(
+                f"Deletion of page {page_to_delete} is not allowed."
+            )
+
+        pages_to_delete = [page_to_delete]
+
+        if keep_children:
+            page_list_str = f"  {page_to_delete}"
+        else:
+            click.echo("Finding child pages ...")
+            page_hierarchy = await get_confluence_page_hierarchy_async(
+                confluence_client=confluence_client,
+                page_id=page_to_delete.id,
+                progress_tracker=page_find_pt,
+            )
+            pages_to_delete = page_hierarchy.pages
+            page_list_str = page_hierarchy.tree_str(indent=2)
+
+        if not yes_to_all:
+            click.echo("\nPage(s) to be deleted:\n")
+            click.echo(page_list_str)
+            click.secho(
+                f"WARNING: About to delete {len(pages_to_delete)} page(s).",
+                fg="yellow",
+            )
+            click.confirm("Do you want to proceed?", abort=True)
+
+        await delete_confluence_pages_async(
+            confluence_client=confluence_client,
+            pages=pages_to_delete,
+            progress_tracker=page_delete_pt,
+        )

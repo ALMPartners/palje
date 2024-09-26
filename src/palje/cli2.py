@@ -1,7 +1,10 @@
+import os
 import click
 
 from palje.version import __version__ as PALJE_VERSION
 
+from palje.cli_commands.copy_cmd import copy_confluence_page
+from palje.cli_commands.sort_cmd import sort_confluence_page_hierarchy
 from palje.cli_commands.delete_cmd import delete_confluence_page
 from palje.cli_commands.document_cmd import document_db_to_confluence
 
@@ -29,8 +32,14 @@ def cli(ctx: click.Context, yes_to_all: bool = False):
     ctx.obj["yes_to_all"] = yes_to_all
 
 
+if os.getenv("PALJE_EXPERIMENTAL_FEATURES_ENABLED"):
+    click.secho("Experimental features enabled.", fg="yellow")
+    cli.add_command(copy_confluence_page, name="copy")
+
+cli.add_command(document_db_to_confluence, name="document")
 cli.add_command(delete_confluence_page, name="delete")
 cli.add_command(document_db_to_confluence, name="document")
+cli.add_command(sort_confluence_page_hierarchy, name="sort")
 
 
 def main():

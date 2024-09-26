@@ -127,30 +127,28 @@ async def main_async(argv: list[str] | None = None):
 
     progress_tracker = ProgressTracker(on_step_callback=print_progress)
 
-    try:
-        space_writable = await is_page_creation_allowed_async(
-            confluence_url=confluence_url,
-            uid=confluence_user_id,
-            api_token=confluence_api_token,
-            space_key=space_key,
-        )
-    except Exception as e:
-        print("Confluence error: ", e)
-        quit()
-
-    if not space_writable:
-        print(
-            f"Can't access Confluence space {space_key} with given credentials."
-            + f" Check your credentials, Confluence URL and space key."
-        )
-        quit()
-
     async with ConfluenceRestClientAsync(
         confluence_url,
         confluence_user_id,
         confluence_api_token,
         progress_callback=progress_tracker.step,
     ) as confluence_client:
+        try:
+            space_writable = await is_page_creation_allowed_async(
+                confluence_client=confluence_client,
+                space_key=space_key,
+            )
+        except Exception as e:
+            print("Confluence error: ", e)
+            quit()
+
+        if not space_writable:
+            print(
+                f"Can't access Confluence space {space_key} with given credentials."
+                + f" Check your credentials, Confluence URL and space key."
+            )
+            quit()
+
         await document_db_to_confluence_async(
             confluence_client=confluence_client,
             db_client=database_client,

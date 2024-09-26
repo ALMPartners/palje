@@ -1,6 +1,10 @@
 """ Classes for representing and managing Confluence data for Palje purposes. """
 
 from __future__ import annotations
+from dataclasses import dataclass
+import pathlib
+
+from palje.confluence.confluence_types import ConfluencePageBodyFormat
 
 
 class ConfluencePageHierarchy:
@@ -94,16 +98,38 @@ class ConfluencePageHierarchy:
 
 
 class ConfluencePage:
-    """Identifies a Confluence page and holds references to its children."""
+    """Confluence page details."""
 
-    def __init__(self, id: int, title: str, child_pages: list[ConfluencePage]):
+    def __init__(
+        self,
+        id: int,
+        title: str,
+        child_pages: list[ConfluencePage] | None = None,
+        parent_page: ConfluencePage | None = None,
+        body_content: str | None = None,
+        body_format: str | None = None,
+    ):
         self._id = id
         self._title = title
-        self._child_pages = child_pages
+        self._child_pages = child_pages or []
+        self._body_content = body_content
+        self._parent_page = parent_page
+        if body_content and not body_format:
+            raise ValueError("body_format must be provided if body_content is provided")
+        if body_format and (body_format not in ConfluencePageBodyFormat):
+            formats_str = [x for x in ConfluencePageBodyFormat].join(", ")
+            raise ValueError(
+                f"Invalid body_format: '{body_format}'. Expected one of: {formats_str}"
+            )
+        self._body_format = body_format
 
     @property
     def child_pages(self) -> list[ConfluencePage]:
         return self._child_pages
+
+    @property
+    def parent_page(self) -> ConfluencePage | None:
+        return self._parent_page
 
     @property
     def id(self) -> int:
@@ -113,5 +139,20 @@ class ConfluencePage:
     def title(self) -> str:
         return self._title
 
+    @property
+    def body_content(self) -> str | None:
+        return self._body_content
+
+    @property
+    def body_format(self) -> str | None:
+        return self._body_format
+
     def __str__(self):
-        return f"{self.title} ({self.id})"
+        return f"ConfluencePage({self.id}, {self.title}, parent={self.parent_page})"
+
+
+@dataclass
+class ConfluencePageAttachment:
+    title: str
+    file_path: pathlib.Path
+    content_type: str

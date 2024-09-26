@@ -5,15 +5,18 @@ from __future__ import annotations
 # Copyright 2021 ALM Partners Oy
 # SPDX-License-Identifier: Apache-2.0
 
-from dataclasses import dataclass
 from enum import Enum
 import json
-from typing import Callable
+from typing import Callable, Literal
 import aiohttp
 from urllib.parse import urljoin
 
-from palje.confluence.confluence_models import ConfluencePage
+from palje.confluence.confluence_models import ConfluencePage, ConfluencePageAttachment
 from palje.confluence.confluence_rest_models import ConfluenceApiPageResult
+from palje.confluence.confluence_types import ConfluencePageBodyFormat
+
+
+# logging.basicConfig(level=logging.DEBUG)
 
 
 class ConfluenceResourceType(Enum):
@@ -81,7 +84,9 @@ class ConfluenceRestClientAsync:
     _client: aiohttp.ClientSession
     _root_url: str
     _DEFAULT_HEADERS = {
-        "Content-Type": "application/json",
+        # TODO: check if default content-type could be overwritten later
+        #       e.g. file uploads will break if set here (need multipart/form-data)
+        # "Content-Type": "application/json",
         "Accept": "application/json",
     }
 
@@ -118,11 +123,14 @@ class ConfluenceRestClientAsync:
             the latter may contain some details about the operation.
 
         """
+
+        # TODO: limit # of conns to some sane max with aiohttp.TCPConnector
         self._root_url = root_url
         if headers is None:
             headers = self._DEFAULT_HEADERS
         self._client = aiohttp.ClientSession(
-            auth=aiohttp.BasicAuth(login=user_id, password=api_token), headers=headers
+            auth=aiohttp.BasicAuth(login=user_id, password=api_token),
+            headers=headers,
         )
         self._progress_callback = progress_callback if progress_callback else None
 
@@ -151,6 +159,50 @@ class ConfluenceRestClientAsync:
         """Broadcast progress via optional callback."""
         if self._progress_callback:
             self._progress_callback(success, message)
+
+    async def move_page_async(
+        self,
+        page_id: int,
+        before_or_after: Literal["before", "after"],
+        target_page_id: int,
+    ) -> None:
+        """Move a page before or after another page.
+
+        Arguments
+        ---------
+
+        page_id: int
+            The id of the page to be moved.
+
+        before_or_after: str
+            The position where the page will be moved. Must be either
+            "before" or "after".
+
+        target_page_id: int
+            The id of the target page.
+
+        Raises
+        ------
+
+        ValueError
+            If the before_or_after argument is invalid.
+
+        """
+
+        if before_or_after not in ["before", "after"]:
+            raise ValueError(f"Invalid value for before_or_after: {before_or_after}")
+
+        url = self._make_url(
+            self._root_url,
+            f"wiki/rest/api/content/{page_id}/move/{before_or_after}/{target_page_id}",
+        )
+
+        async with self._client.put(
+            url,
+            headers={"Content-Type": "application/json"},
+        ) as response:
+            response.raise_for_status()
+            return
 
     async def get_child_pages_async(
         self, parent_page_id: int
@@ -333,12 +385,15 @@ class ConfluenceRestClientAsync:
             "title": page_title,
             "body": {"representation": "storage", "value": page_content},
         }
-
         if parent_id:
             data["parentId"] = parent_id
 
         api_endpoint = self._make_url(self._root_url, "wiki/api/v2/pages")
-        async with self._client.post(api_endpoint, data=json.dumps(data)) as response:
+        async with self._client.post(
+            api_endpoint,
+            data=json.dumps(data),
+            headers={"Content-Type": "application/json"},
+        ) as response:
             response.raise_for_status()
             page_id: int | None = None
             if results := (await response.json()):
@@ -393,7 +448,10 @@ class ConfluenceRestClientAsync:
             ) from e
 
     async def get_page_by_title_async(
-        self, space_id: int, page_title: str
+        self,
+        space_id: int,
+        page_title: str,
+        body_format: ConfluencePageBodyFormat = ConfluencePageBodyFormat.STORAGE,
     ) -> ConfluenceApiPageResult:
         """Get the page in given space with given title.
 
@@ -405,6 +463,9 @@ class ConfluenceRestClientAsync:
             The id of the space the page is in.
         page_title
             The title of the page.
+        body_format:
+            The format of the page body to be returned. Default NONE means that
+            the body content is not returned.
 
         Returns
         -------
@@ -425,9 +486,10 @@ class ConfluenceRestClientAsync:
         url = self._make_url(self._root_url, "wiki/api/v2/pages")
 
         try:
-            async with self._client.get(
-                url, params={"title": page_title, "space-id": [space_id]}
-            ) as response:
+            params = {"title": page_title, "space-id": space_id}
+            if body_format != ConfluencePageBodyFormat.NONE:
+                params["body-format"] = body_format.value
+            async with self._client.get(url, params=params) as response:
                 response.raise_for_status()
                 if response.status == 200:
                     if results := (await response.json())["results"]:
@@ -477,6 +539,42 @@ class ConfluenceRestClientAsync:
                 if results := (await response.json())["results"]:
                     page_id = results[0]["id"]
             return page_id
+
+    async def get_pages_in_space_async(
+        self, space_id: int
+    ) -> list[ConfluenceApiPageResult]:
+        """Get all pages in a Confluence space.
+
+        Arguments
+        ---------
+        space_id
+            The id of the space.
+
+        Returns
+        -------
+        list[ConfluenceApiPageResult]
+            A list of the pages in the space.
+        """
+        url = self._make_url(self._root_url, f"wiki/api/v2/spaces/{space_id}/pages")
+        params = {"limit": 250}
+        has_more = True
+        page_results = []
+
+        while has_more:
+            async with self._client.get(url, params=params) as response:
+                response.raise_for_status()
+                response_json = await response.json()
+                results = response_json["results"]
+                page_results.extend(
+                    [ConfluenceApiPageResult.from_dict(result) for result in results]
+                )
+                if "_links" in response_json and "next" in response_json["_links"]:
+                    url = self._make_url(
+                        self._root_url, response_json["_links"]["next"]
+                    )
+                else:
+                    has_more = False
+        return page_results
 
     async def get_permitted_operations_on_resource_async(
         self, resource_type: ConfluenceResourceType, resource_id: int
@@ -559,7 +657,9 @@ class ConfluenceRestClientAsync:
             self._root_url, f"wiki/api/v2/pages/{page_id}/versions"
         )
         async with self._client.get(
-            page_version_api_url, params={"limit": 1, "sort": "-modified-date"}
+            page_version_api_url,
+            params={"limit": 1, "sort": "-modified-date"},
+            headers={"Content-Type": "application/json"},
         ) as response:
             response.raise_for_status()
             if results := (await response.json())["results"]:
@@ -584,13 +684,108 @@ class ConfluenceRestClientAsync:
 
         page_api_url = self._make_url(self._root_url, f"wiki/api/v2/pages/{page_id}")
         async with self._client.put(
-            page_api_url, data=json.dumps(new_data)
+            page_api_url,
+            data=json.dumps(new_data),
+            headers={"Content-Type": "application/json"},
         ) as response:
             response.raise_for_status()
             if results := (await response.json()):
                 page_id = results["id"]
             self._update_write_progress(page_id is not None, page_title)
             return page_id
+
+    # region Attachments
+
+    async def get_page_attachments(self, page_id: int) -> list:
+        """Get the attachments of a page.
+
+        Arguments
+        ---------
+        page_id
+            The id of the page.
+
+        Returns
+        -------
+        list
+            A list of the attachments of the page.
+        """
+        url = self._make_url(self._root_url, f"wiki/api/v2/pages/{page_id}/attachments")
+        async with self._client.get(url) as response:
+            response.raise_for_status()
+            return await response.json()
+
+    async def upsert_page_attachment_async(
+        self, page_id: int, attachment: ConfluencePageAttachment
+    ) -> int:
+        """Add or update file attachment in given page.
+
+            Notice: Implemented with Confluence REST API v1. This may get deprecated at
+            some point. At the time of writing, REST API v2 does not support adding
+            attachments to a page (yet).
+
+        Parameters
+        ---------
+        attachment: ConfluencePageAttachment
+            The attachment to be added.
+
+        Returns
+        -------
+        int
+            The id of the attachment.
+        """
+
+        headers = self._DEFAULT_HEADERS.copy()
+        headers["X-Atlassian-Token"] = "nocheck"
+        url = self._make_url(
+            self._root_url, f"/wiki/rest/api/content/{page_id}/child/attachment"
+        )
+
+        with open(attachment.file_path, "rb") as file:
+            form_data = aiohttp.FormData()
+
+            form_data.add_field(
+                "file",
+                file,
+                filename=attachment.title,
+                content_type=attachment.content_type,
+            )
+
+            async with self._client.put(
+                url, data=form_data, headers=headers
+            ) as response:
+                response.raise_for_status()
+                json_resp = await response.json()
+                return json_resp["results"][0]["id"]
+
+    async def download_file_async(self, rel_download_path: str) -> bytes:
+        """Download a file and return it as bytes. Meant for downloading Confluence page
+           attachments, not tested for other purposes.
+
+        Arguments
+        ---------
+        dowload_link
+            The link to the file in Confluence to be downloaded.
+
+        Returns
+        -------
+        bytes
+            The content of the file.
+        """
+        url = self._make_url(self._root_url, f"wiki/{rel_download_path}")
+        async with self._client.get(url) as resp:
+            assert resp.status == 200
+            return await resp.read()
+
+    # endregion Attachments
+
+    async def create_page_async(self, space_id: int, page: ConfluencePage) -> int:
+        """Create a new page"""
+        parent_id: int | None = page.parent_page.id if page.parent_page else None
+        page_id = await self.new_page_async(
+            space_id, page.title, page.body_content, parent_id=parent_id
+        )
+
+        return page_id
 
     async def upsert_page_async(
         self,
