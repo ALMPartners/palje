@@ -521,7 +521,7 @@ def create_object_type_page_title(
 
     str
     """
-    return database_name + "." + schema + "." + object_type
+    return object_type + " " + database_name + "." + schema
 
 
 def create_object_page_content(
