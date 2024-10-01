@@ -1,0 +1,21 @@
+parameters:
+  - name: pythonVersion
+    type: string
+
+steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '${{parameters.pythonVersion}}'
+    displayName: 'Use Python ${{parameters.pythonVersion}}'
+
+  - bash: |
+      set -ex
+      python -m venv testvenv
+      source testvenv/scripts/activate
+      python -m pip install --upgrade pip
+      pip install artifacts-keyring --no-input
+      set ARTIFACTS_KEYRING_NONINTERACTIVE_MODE=true
+      pip config set global.index-url $(ArtifactsIndexURL) 
+      pip install .[test] ahjo pytest-azurepipelines
+      pytest test/ --test-run-title="Palje pytest"
+    displayName: "Palje pytest"

@@ -1,0 +1,49 @@
+steps:
+  - task: DownloadPipelineArtifact@2
+    inputs:
+      source: "current"
+      pattern: '*.msi'
+      targetPath: '$(Pipeline.Workspace)/msiupload'
+    displayName: "Download build artefacts"
+  
+  - task: powershell@2
+    inputs:
+      targetType: 'inline'
+      script: |
+        Invoke-WebRequest https://aka.ms/downloadazcopy-v10-windows -OutFile azcopy.zip
+        Expand-Archive azcopy.zip -DestinationPath D:/a/1/s/temp/azcopy
+        Move-Item -Path D:/a/1/s/temp/azcopy/azcopy*/*.exe -Destination D:/a/1/s/temp/azcopy/azcopy.exe
+    displayName: Install az copy
+
+# Use powershell to move msi-files from workspace/msiupload to workspace/msi
+  - powershell: |
+      $source1 = "$(Pipeline.Workspace)/msiupload/MSIBuild.BuildForSystem"
+      $source2 = "$(Pipeline.Workspace)/msiupload/MSIBuild.BuildForUser"
+      $destination = "$(Pipeline.Workspace)/msi"
+      mkdir $destination
+      Get-ChildItem -Path $source1 -Filter *.msi | Move-Item -Destination $destination
+      Get-ChildItem -Path $source2 -Filter *.msi | Move-Item -Destination $destination
+      cd $destination
+      ls
+    displayName: Move MSI-files before upload
+
+  - task: AzureCLI@2
+    inputs:
+      azureSubscription: Azure-Systest
+      scriptType: 'ps' 
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        $env:AZCOPY_AUTO_LOGIN_TYPE="SPN"
+        $env:AZCOPY_SPA_CLIENT_SECRET="$(TFTAClientSecret)"
+        $env:AZCOPY_SPA_APPLICATION_ID="$(TFTAApplicationId)"
+        $env:AZCOPY_TENANT_ID="$(TenantId)"
+        $env:AZCOPY_ACTIVE_DIRECTORY_ENDPOINT="https://login.microsoftonline.com/$(TenantId)/oauth2/v2.0/token"
+        D:/a/1/s/temp/azcopy/azcopy.exe copy '$(Pipeline.Workspace)/msi/*' "$(StorageAccountURL)" --recursive --preserve-smb-permissions=true --preserve-smb-info=true
+    displayName: Copy msi-files to Azure Storage
+
+  - task: powershell@2
+    inputs:
+      targetType: 'inline'
+      script: |
+        Invoke-WebRequest -Method POST -Uri "$(MPATriggerURL)"
+    displayName: Trigger MPA-release pipeline

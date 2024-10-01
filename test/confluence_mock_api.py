@@ -4,7 +4,7 @@ from aiohttp.test_utils import RawTestServer
 from aiohttp.web import Request, Response
 
 TEST_SERVER_HOST = "127.0.0.1"
-TEST_SERVER_PORT = 80
+TEST_SERVER_PORT = 8080
 
 VALID_CREDENTIALS = {"user": "tester@organization.org", "api_token": "test-token"}
 

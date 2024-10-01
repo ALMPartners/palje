@@ -1,6 +1,8 @@
 parameters:
 - name: pythonVersion
   type: string
+- name: MsiTargetType
+  type: string
 
 steps:
   - task: UsePythonVersion@0
@@ -16,21 +18,13 @@ steps:
       pip install artifacts-keyring --no-input
       set ARTIFACTS_KEYRING_NONINTERACTIVE_MODE=true
       pip config set global.index-url $(ArtifactsIndexURL) 
-      pip install . cx_freeze
-      python ./msi_build.py bdist_msi
-      export PALJE_MSI_TARGET_TYPE="system"
+      pip install .[msibuild]
+      export PALJE_MSI_TARGET_TYPE=${{parameters.MsiTargetType}}
       python ./msi_build.py bdist_msi
       deactivate
       pip install wheel twine
       python -m pip wheel . -w dist --no-deps
-    displayName: "Build release artefacts"
-
-  - bash: |
-      set -ex
-      source venv_msi_build/scripts/activate
-      pip install ahjo pytest pytest-azurepipelines
-      pytest test/ --test-run-title="Palje pytest"
-    displayName: "Palje pytest"
+    displayName: "Build MSI-installer"
 
   - task: DotNetCoreCLI@2
     inputs:
@@ -47,47 +41,3 @@ steps:
     inputs:
       targetPath: 'dist'
     displayName: Publish msi-file as a pipeline artifact
-
-  - task: TwineAuthenticate@1
-    inputs:
-      artifactFeed: 'almpAssets'
-    displayName: 'Authenticate to Artifacts with Twine'
-    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
-
-  - script: |
-        twine upload -r almpAssets --config-file $(PYPIRC_PATH) --skip-existing dist/*.whl --verbose
-    displayName: 'Publish wheel to Artifacts'
-    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
-
-  - task: powershell@2
-    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
-    inputs:
-      targetType: 'inline'
-      script: |
-        Invoke-WebRequest https://aka.ms/downloadazcopy-v10-windows -OutFile azcopy.zip
-        Expand-Archive azcopy.zip -DestinationPath D:/a/1/s/temp/azcopy
-        Move-Item -Path D:/a/1/s/temp/azcopy/azcopy*/*.exe -Destination D:/a/1/s/temp/azcopy/azcopy.exe
-    displayName: Install az copy
-
-  - task: AzureCLI@2
-    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
-    inputs:
-      azureSubscription: Azure-Systest
-      scriptType: 'ps' 
-      scriptLocation: 'inlineScript'
-      inlineScript: |
-        $env:AZCOPY_AUTO_LOGIN_TYPE="SPN"
-        $env:AZCOPY_SPA_CLIENT_SECRET="$(TFTAClientSecret)"
-        $env:AZCOPY_SPA_APPLICATION_ID="$(TFTAApplicationId)"
-        $env:AZCOPY_TENANT_ID="$(TenantId)"
-        $env:AZCOPY_ACTIVE_DIRECTORY_ENDPOINT="https://login.microsoftonline.com/$(TenantId)/oauth2/v2.0/token"
-        D:/a/1/s/temp/azcopy/azcopy.exe copy 'D:/\a\1\s\dist\*' "$(StorageAccountURL)" --recursive --preserve-smb-permissions=true --preserve-smb-info=true
-    displayName: Copy msi-files to Azure Storage
-
-  - task: powershell@2
-    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
-    inputs:
-      targetType: 'inline'
-      script: |
-        Invoke-WebRequest -Method POST -Uri "$(MPATriggerURL)"
-    displayName: Trigger MPA-release pipeline

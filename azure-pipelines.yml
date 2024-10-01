@@ -4,6 +4,9 @@ trigger:
     include:
     - '*'
   branches:
+    include:
+    - dev
+    - master
     exclude:
     - '*'
 
@@ -15,14 +18,66 @@ variables:
   - template: azure-pipelines/azure-variables-template.yml
 
 # List of jobs for the pipeline to execute
-jobs:
-  - job: Build # System name for job
-    displayName: Build artifacts # Display name for job
+stages:
+- stage: MSIBuild
+  displayName: Build MSI-installers
+  trigger: automatic
+  jobs:
+  - job: BuildForUser # System name for job
+    displayName: Build user installer # Display name for job
     pool: # Which DevOps Agent the job uses, for msi-builds windows OS is required. If access to ALMP Azure resources is needed, the pool must be self-hosted
       name: Azure Pipelines # Pool name
       vmImage: 'windows-latest' # virtual machine image/OS
-    timeoutInMinutes: 30 # Timeout
+    timeoutInMinutes: 15 # Timeout
     steps: # What steps the job includes. These are fetched from a job-template-file or can be defined on to the main file here (not recommended)
     - template: 'azure-pipelines/azure-build-template.yml' # Path to template file
       parameters: # Parameters the job needs
         pythonVersion: $(pythonVersion)
+        MsiTargetType: "user"
+  - job: BuildForSystem # System name for job
+    displayName: Build system installer # Display name for job
+    pool: # Which DevOps Agent the job uses, for msi-builds windows OS is required. If access to ALMP Azure resources is needed, the pool must be self-hosted
+      name: Azure Pipelines # Pool name
+      vmImage: 'windows-latest' # virtual machine image/OS
+    timeoutInMinutes: 15 # Timeout
+    steps: # What steps the job includes. These are fetched from a job-template-file or can be defined on to the main file here (not recommended)
+    - template: 'azure-pipelines/azure-build-template.yml' # Path to template file
+      parameters: # Parameters the job needs
+        pythonVersion: $(pythonVersion)
+        MsiTargetType: "system"
+
+- stage: Test
+  displayName: Run pytests
+  trigger: automatic
+  jobs:
+  - job: Pytests
+    displayName: Run tests
+    pool:
+      name: Azure Pipelines
+      vmImage: 'windows-latest'
+    timeoutInMinutes: 10
+    steps:
+    - template: 'azure-pipelines/azure-pytest-template.yml'
+      parameters:
+        pythonVersion: $(pythonVersion)
+
+- stage: Release
+  displayName: Trigger MPA-release flows    
+  trigger: manual
+  jobs:
+  - job: UploadWheels
+    displayName: Upload wheels to Azure Artifacts
+    pool:
+      name: Azure Pipelines
+      vmImage: 'windows-latest'
+    timeoutInMinutes: 10
+    steps:
+    - template: 'azure-pipelines/ALMPassets-upload-template.yml'
+  - job: TriggerMPA
+    displayName: Move files to Az storage and trigger MPA-release pipeline
+    pool:
+      name: Azure Pipelines
+      vmImage: 'windows-latest'
+    timeoutInMinutes: 10
+    steps:
+    - template: 'azure-pipelines/MPA-trigger-template.yml'

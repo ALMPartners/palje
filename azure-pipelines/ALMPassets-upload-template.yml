@@ -1,0 +1,21 @@
+steps:
+  - task: DownloadPipelineArtifact@2
+    inputs:
+      source: "current"
+      pattern: '*.whl'
+      targetPath: '$(Pipeline.Workspace)/whlupload'
+    displayName: "Download build artefacts"
+
+  - bash: |
+      python -m pip install --upgrade pip
+      pip install twine
+    displayName: "Install twine"
+
+  - task: TwineAuthenticate@1
+    inputs:
+      artifactFeed: 'almpAssets'
+    displayName: 'Authenticate to Artifacts with Twine'
+
+  - script: |
+        twine upload -r almpAssets --config-file $(PYPIRC_PATH) --skip-existing $(Pipeline.Workspace)/whlupload/* --verbose
+    displayName: 'Publish wheel to Artifacts'
