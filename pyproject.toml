@@ -33,7 +33,7 @@ classifiers = [
 Repository = "https://github.com/ALMPartners/palje"
 
 [project.optional-dependencies]
-dev = ["black ~= 23.12", "pre-commit ~= 3.7"]
+dev = ["black == 24.8.0", "pre-commit ~= 3.7"]
 test = ["tox ~= 4.15", "pytest-aiohttp ~= 1.0"]
 msibuild = ["cx_freeze ~= 7.0"]
 
