@@ -88,7 +88,7 @@ target_name = f"Palje-{version}-{get_platform()}-{installer_type_suffix}.msi"
 bdist_msi_options = {
     "upgrade_code": upgrade_code,
     "add_to_path": True,
-    "target_name": target_name,
+    "target_name": name,
     "initial_target_dir": rf"[{programfiles_dir}]\{author}\{name}",
     "all_users": installer_type == "SYSTEM",
     "data": msi_data,

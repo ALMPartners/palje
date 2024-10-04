@@ -21,6 +21,7 @@ steps:
       pip install .[msibuild]
       export PALJE_MSI_TARGET_TYPE=${{parameters.MsiTargetType}}
       python ./msi_build.py bdist_msi
+      for file in dist/*.msi; do mv "$file" "${file%.msi}-${PALJE_MSI_TARGET_TYPE}.msi"; done
       deactivate
       pip install wheel twine
       python -m pip wheel . -w dist --no-deps
@@ -34,7 +35,7 @@ steps:
     displayName: Install AzureSignTool
 
   - bash: |
-      AzureSignTool sign -kvu "$(kvURI)" -kvi $(ApplicationId) -kvt $(TenantId) -kvs $(ClientSecret) -kvc $(certName) -tr "http://ts.ssl.com" -td sha256 D:/a/1/s/dist/*.msi
+      AzureSignTool sign -d "Palje" -kvu "$(kvURI)" -kvi $(ApplicationId) -kvt $(TenantId) -kvs $(ClientSecret) -kvc $(certName) -tr "http://ts.ssl.com" -td sha256 D:/a/1/s/dist/*.msi
     displayName: Sign all msi-files in artefacts-directory
 
   - task: PublishPipelineArtifact@1
