@@ -33,31 +33,31 @@ def _display_progress(pt: ProgressTracker):
 
 # TODO: move conf auth params to context (every palje command needs these?)
 @click.option(
-    "--confluence-root-url",
+    "--target-confluence-root-url",
     help="Confluence root URL. Optionally read from env var "
-    + "PALJE_CONFLUENCE_ROOT_URL. Prompted for if not available at runtime.",
-    default=lambda: os.environ.get("PALJE_CONFLUENCE_ROOT_URL", ""),
+    + "PALJE_TARGET_CONFLUENCE_ROOT_URL. Prompted for if not available at runtime.",
+    default=lambda: os.environ.get("PALJE_TARGET_CONFLUENCE_ROOT_URL", ""),
 )
 @click.option(
-    "--confluence-space-key",
+    "--target-confluence-space-key",
     help="Key of the target Confluence space. "
-    + "Optionally read from env var PALJE_CONFLUENCE_SPACE_KEY. "
+    + "Optionally read from env var PALJE_TARGET_CONFLUENCE_SPACE_KEY. "
     + "Prompted for if not available at runtime.",
-    default=lambda: os.environ.get("PALJE_CONFLUENCE_SPACE_KEY", ""),
+    default=lambda: os.environ.get("PALJE_TARGET_CONFLUENCE_SPACE_KEY", ""),
 )
 @click.option(
-    "--atlassian-user-id",
+    "--target-atlassian-user-id",
     help="Atlassian user id for accessing Confluence. Typically an email address. "
-    + "Optionally read from env var PALJE_ATLASSIAN_USER_ID. "
+    + "Optionally read from env var PALJE_TARGET_ATLASSIAN_USER_ID. "
     + "Prompted for if not available at runtime.",
-    default=lambda: os.environ.get("PALJE_ATLASSIAN_USER_ID", ""),
+    default=lambda: os.environ.get("PALJE_TARGET_ATLASSIAN_USER_ID", ""),
 )
 @click.option(
-    "--atlassian-api-token",
+    "--target-atlassian-api-token",
     help="Atlassian API token for accessing Confluence. Optionally read from env var "
     + "PALJE_ATLASSIAN_API_TOKEN. Prompted for if not available at runtime.",
     show_default=False,
-    default=lambda: os.environ.get("PALJE_ATLASSIAN_API_TOKEN", ""),
+    default=lambda: os.environ.get("PALJE_TARGET_ATLASSIAN_API_TOKEN", ""),
 )
 @click.option(
     "--db-auth",
@@ -109,7 +109,8 @@ def _display_progress(pt: ProgressTracker):
 @click.option(
     "--parent-page-title",
     help="Title of the Confluence page under which the documentation is created. "
-    + "If not given, a default name will be derived from the database name.",
+    + "If not given, a default name will be derived from the database name. "
+    + 'Enter the value in "double quotes" if it contains whitespace.',
 )
 @click.option(
     "--schema",
@@ -143,10 +144,10 @@ def _display_progress(pt: ProgressTracker):
     + "to unexpected failures. Only has effect with --use-concurrency.",
 )
 def document_db_to_confluence(
-    confluence_root_url: str,
-    confluence_space_key: str,
-    atlassian_user_id: str,
-    atlassian_api_token: str,
+    target_confluence_root_url: str,
+    target_confluence_space_key: str,
+    target_atlassian_user_id: str,
+    target_atlassian_api_token: str,
     db_auth: MSSQLDatabaseAuthType,
     db_driver: str,
     db_server: str,
@@ -163,16 +164,16 @@ def document_db_to_confluence(
 
     Arguments
     ---------
-    confluence_root_url : str
+    target_confluence_root_url : str
         The root URL of the Confluence server.
 
-    confluence_space_key : str
+    target_confluence_space_key : str
         The key of the Confluence space.
 
-    atlassian_user_id : str
+    target_atlassian_user_id : str
         The Atlassian user id.
 
-    atlassian_api_token : str
+    target_atlassian_api_token : str
         The Atlassian API token.
 
     db_auth : MSSQLDatabaseAuthType
@@ -218,17 +219,19 @@ def document_db_to_confluence(
     """
     # Prompt for missing params
 
-    if not confluence_root_url:
-        confluence_root_url = click.prompt("Confluence root URL")
+    if not target_confluence_root_url:
+        target_confluence_root_url = click.prompt("Confluence root URL")
 
-    if not confluence_space_key:
-        confluence_space_key = click.prompt("Confluence space key")
+    if not target_confluence_space_key:
+        target_confluence_space_key = click.prompt("Confluence space key")
 
-    if not atlassian_user_id:
-        atlassian_user_id = click.prompt("Atlassian user ID")
+    if not target_atlassian_user_id:
+        target_atlassian_user_id = click.prompt("Atlassian user ID")
 
-    if not atlassian_api_token:
-        atlassian_api_token = click.prompt("Atlassian API token", hide_input=True)
+    if not target_atlassian_api_token:
+        target_atlassian_api_token = click.prompt(
+            "Atlassian API token", hide_input=True
+        )
 
     if not db_server:
         db_server = click.prompt("Database server")
@@ -297,11 +300,11 @@ def document_db_to_confluence(
     try:
         asyncio.run(
             _document_db_to_confluence_async(
-                confluence_root_url,
-                atlassian_user_id,
-                atlassian_api_token,
+                target_confluence_root_url,
+                target_atlassian_user_id,
+                target_atlassian_api_token,
                 database_client,
-                confluence_space_key,
+                target_confluence_space_key,
                 parent_page_title,
                 list(set(schema)),
                 list(set(dependency_db)),
@@ -332,11 +335,11 @@ def document_db_to_confluence(
 
 
 async def _document_db_to_confluence_async(
-    confluence_root_url: str,
-    atlassian_user_id: str,
-    atlassian_api_token: str,
+    tgt_confluence_root_url: str,
+    tgt_atlassian_user_id: str,
+    tgt_atlassian_api_token: str,
     database_client: MSSQLDatabase,
-    confluence_space_key: str,
+    tgt_confluence_space_key: str,
     parent_page_title: str,
     schema: tuple[str, ...],
     dependency_db: tuple[str, ...],
@@ -345,25 +348,25 @@ async def _document_db_to_confluence_async(
     max_concurrency: int,
 ):
     async with ConfluenceRestClientAsync(
-        confluence_root_url,
-        atlassian_user_id,
-        atlassian_api_token,
+        tgt_confluence_root_url,
+        tgt_atlassian_user_id,
+        tgt_atlassian_api_token,
         progress_callback=progress_tracker.step,
     ) as confluence_client:
         click.echo(f"Checking Confluence permissions for page creation ... ", nl=False)
         is_writable_space = await is_page_creation_allowed_async(
-            confluence_client=confluence_client, space_key=confluence_space_key
+            confluence_client=confluence_client, space_key=tgt_confluence_space_key
         )
         click.echo("OK" if is_writable_space else "FAILED")
         if not is_writable_space:
             raise click.ClickException(
-                f"Space key#{confluence_space_key} doesn't allow page creation."
+                f"Space key#{tgt_confluence_space_key} doesn't allow page creation."
             )
 
         await document_db_to_confluence_async(
             confluence_client=confluence_client,
             db_client=database_client,
-            confluence_space_key=confluence_space_key,
+            confluence_space_key=tgt_confluence_space_key,
             parent_page_title=parent_page_title,
             schemas=list(set(schema)),
             additional_databases=list(set(dependency_db)),

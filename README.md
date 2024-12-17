@@ -110,8 +110,8 @@ See the online-documentation for supported ENV vars and their exact names.
 Example of setting some ENV vars in PowerShell:
 
 ```
-$env:PALJE_ATLASSIAN_USER_ID = "firstname.lastname@organization.org"
-$env:PALJE_ATLASSIAN_API_TOKEN = "S3CR3T"
+$env:SOURCE_PALJE_ATLASSIAN_USER_ID = "firstname.lastname@organization.org"
+$env:SOURCE_PALJE_ATLASSIAN_API_TOKEN = "S3CR3T"
 $env:PALJE_DB_SERVER = "localhost,14330"
 ...
 ```

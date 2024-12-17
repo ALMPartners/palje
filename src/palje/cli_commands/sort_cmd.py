@@ -36,41 +36,45 @@ def _check_page_identification_params(
     name="sort",
 )
 @click.option(
-    "--confluence-root-url",
+    "--target-confluence-root-url",
     help="Confluence root URL. Optionally read from env var "
-    + "PALJE_CONFLUENCE_ROOT_URL. Prompted for if not available at runtime.",
-    default=lambda: os.environ.get("PALJE_CONFLUENCE_ROOT_URL", ""),
+    + "PALJE_TARGET_CONFLUENCE_ROOT_URL. Prompted for if not available at runtime.",
+    default=lambda: os.environ.get("PALJE_TARGET_CONFLUENCE_ROOT_URL", ""),
 )
 @click.option(
-    "--atlassian-user-id",
+    "--target-atlassian-user-id",
     help="Atlassian user id for accessing Confluence. Typically an email address. "
-    + "Optionally read from env var PALJE_ATLASSIAN_USER_ID. "
+    + "Optionally read from env var PALJE_TARGET_ATLASSIAN_USER_ID. "
     + "Prompted for if not available at runtime.",
-    default=lambda: os.environ.get("PALJE_ATLASSIAN_USER_ID", ""),
+    default=lambda: os.environ.get("PALJE_TARGET_ATLASSIAN_USER_ID", ""),
 )
 @click.option(
-    "--atlassian-api-token",
+    "--target-atlassian-api-token",
     help="Atlassian API token for accessing Confluence. Optionally read from env var "
-    + "PALJE_ATLASSIAN_API_TOKEN. Prompted for if not available at runtime.",
+    + "PALJE_TARGET_ATLASSIAN_API_TOKEN. Prompted for if not available at runtime.",
     hide_input=True,
     show_default=False,
-    default=lambda: os.environ.get("PALJE_ATLASSIAN_API_TOKEN", ""),
+    default=lambda: os.environ.get("PALJE_TARGET_ATLASSIAN_API_TOKEN", ""),
 )
 @click.option(
-    "--confluence-space-key",
+    "--target-confluence-space-key",
     help="Space key of the Confluence page hierarchy to sort. Required when "
-    + "identifying the root page by title.",
-    default=lambda: os.environ.get("PALJE_CONFLUENCE_SPACE_KEY", ""),
+    + "identifying the root page by title. Optionally read from env var "
+    + "PALJE_TARGET_CONFLUENCE_SPACE_KEY. Prompted for if not available at runtime.",
+    default=lambda: os.environ.get("PALJE_TARGET_CONFLUENCE_SPACE_KEY", ""),
 )
 @click.option(
     "--parent-page-title",
-    help="Title of the page whose child pages are to be sorted. Requires space "
-    + "key, too.",
+    help="Title of the page whose child pages are to be sorted (instead of "
+    + "--parent-page-id). "
+    + "Requires --target-confluence-space-key key, too. "
+    + 'Enter the value in "double quotes" if it contains whitespace.',
     callback=_check_page_identification_params,
 )
 @click.option(
     "--parent-page-id",
-    help="Id of the page whose children are to be sorted.",
+    help="Id of the page whose children are to be sorted. May be used instead of "
+    + "--parent-page-title and --target-confluence-space-key.",
     callback=_check_page_identification_params,
     is_eager=True,  # makes sure id seen before other page identifying params
 )
@@ -90,10 +94,10 @@ def _check_page_identification_params(
 @click.pass_context
 def sort_confluence_page_hierarchy(
     ctx: click.Context,
-    confluence_root_url: str,
-    atlassian_user_id: str,
-    atlassian_api_token: str,
-    confluence_space_key: str | None = None,
+    target_confluence_root_url: str,
+    target_atlassian_user_id: str,
+    target_atlassian_api_token: str,
+    target_confluence_space_key: str | None = None,
     parent_page_title: str | None = None,
     parent_page_id: str | None = None,
     recursive: bool = False,
@@ -106,25 +110,27 @@ def sort_confluence_page_hierarchy(
             "Either --parent-page-id OR --parent-page-title must be provided."
         )
 
-    if not confluence_root_url:
-        confluence_root_url = click.prompt("Confluence root URL")
+    if not target_confluence_root_url:
+        target_confluence_root_url = click.prompt("Confluence root URL")
 
-    if not atlassian_user_id:
-        atlassian_user_id = click.prompt("Atlassian user ID")
+    if not target_atlassian_user_id:
+        target_atlassian_user_id = click.prompt("Atlassian user ID")
 
-    if not atlassian_api_token:
-        atlassian_api_token = click.prompt("Atlassian API token", hide_input=True)
+    if not target_atlassian_api_token:
+        target_atlassian_api_token = click.prompt(
+            "Atlassian API token", hide_input=True
+        )
 
     if not parent_page_id:
-        if not confluence_space_key:
-            confluence_space_key = click.prompt("Confluence space key")
+        if not target_confluence_space_key:
+            target_confluence_space_key = click.prompt("Confluence space key")
     try:
         asyncio.run(
             _sort_child_pages_alphabetically_async(
-                confluence_root_url=confluence_root_url,
-                atlassian_user_id=atlassian_user_id,
-                atlassian_api_token=atlassian_api_token,
-                confluence_space_key=confluence_space_key,
+                tgt_confluence_root_url=target_confluence_root_url,
+                tgt_atlassian_user_id=target_atlassian_user_id,
+                tgt_atlassian_api_token=target_atlassian_api_token,
+                tgt_confluence_space_key=target_confluence_space_key,
                 parent_page_title=parent_page_title,
                 parent_page_id=parent_page_id,
                 recursive=recursive,
@@ -142,10 +148,10 @@ def sort_confluence_page_hierarchy(
 
 
 async def _sort_child_pages_alphabetically_async(
-    confluence_root_url: str,
-    atlassian_user_id: str,
-    atlassian_api_token: str,
-    confluence_space_key: str | None = None,
+    tgt_confluence_root_url: str,
+    tgt_atlassian_user_id: str,
+    tgt_atlassian_api_token: str,
+    tgt_confluence_space_key: str | None = None,
     parent_page_title: str | None = None,
     parent_page_id: str | None = None,
     recursive: bool = False,
@@ -153,25 +159,25 @@ async def _sort_child_pages_alphabetically_async(
     progress_tracker: ProgressTracker | None = None,
 ) -> None:
     async with ConfluenceRestClientAsync(
-        root_url=confluence_root_url,
-        api_token=atlassian_api_token,
-        user_id=atlassian_user_id,
-    ) as confluence_client:
+        root_url=tgt_confluence_root_url,
+        api_token=tgt_atlassian_api_token,
+        user_id=tgt_atlassian_user_id,
+    ) as tgt_confluence_client:
         if not parent_page_id:
             parent_page = await get_confluence_page_by_title_async(
-                confluence_client=confluence_client,
+                confluence_client=tgt_confluence_client,
                 page_title=parent_page_title,
-                space_key=confluence_space_key,
+                space_key=tgt_confluence_space_key,
             )
         else:
             parent_page = await get_confluence_page_by_id_async(
-                confluence_client=confluence_client,
+                confluence_client=tgt_confluence_client,
                 page_id=parent_page_id,
             )
 
         click.echo("Reorganizing pages ...")
         await sort_child_pages_alphabetically_async(
-            confluence_client=confluence_client,
+            confluence_client=tgt_confluence_client,
             page_id=parent_page.id,
             recursive=recursive,
             case_sensitive=case_sensitive,

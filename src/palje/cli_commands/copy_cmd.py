@@ -56,45 +56,46 @@ def _check_page_identification_params(ctx, param, value):
 # region Source page identification
 #
 @click.option(
-    "--confluence-root-url",
+    "--source-confluence-root-url",
     help="Source Confluence root URL. Optionally read from env var "
-    + "PALJE_CONFLUENCE_ROOT_URL. Prompted for if not available at runtime.",
-    default=lambda: os.environ.get("PALJE_CONFLUENCE_ROOT_URL", ""),
+    + "PALJE_SOURCE_CONFLUENCE_ROOT_URL. Prompted for if not available at runtime.",
+    default=lambda: os.environ.get("PALJE_SOURCE_CONFLUENCE_ROOT_URL", ""),
 )
 @click.option(
-    "--confluence-space-key",
+    "--source-confluence-space-key",
     help="Space key of the Confluence page to copy by its --page-title. "
-    + "Optionally read from env var PALJE_CONFLUENCE_SPACE_KEY. "
+    + "Optionally read from env var PALJE_SOURCE_CONFLUENCE_SPACE_KEY. "
     + "Prompted for if not available at runtime.",
-    default=lambda: os.environ.get("PALJE_CONFLUENCE_SPACE_KEY", ""),
+    default=lambda: os.environ.get("PALJE_SOURCE_CONFLUENCE_SPACE_KEY", ""),
 )
 @click.option(
-    "--atlassian-user-id",
+    "--source-atlassian-user-id",
     help="Atlassian user id for accessing the source Confluence. Typically an email address. "
-    + "Optionally read from env var PALJE_ATLASSIAN_USER_ID. "
+    + "Optionally read from env var PALJE_SOURCE_ATLASSIAN_USER_ID. "
     + "Prompted for if not available at runtime.",
-    default=lambda: os.environ.get("PALJE_ATLASSIAN_USER_ID", ""),
+    default=lambda: os.environ.get("PALJE_SOURCE_ATLASSIAN_USER_ID", ""),
 )
 @click.option(
-    "--atlassian-api-token",
+    "--source-atlassian-api-token",
     help="Atlassian API token for accessing the source Confluence. Optionally read from env var "
-    + "PALJE_ATLASSIAN_API_TOKEN. Prompted for if not available at runtime.",
+    + "PALJE_SOURCE_ATLASSIAN_API_TOKEN Prompted for if not available at runtime.",
     hide_input=True,
     show_default=False,
-    default=lambda: os.environ.get("PALJE_ATLASSIAN_API_TOKEN", ""),
+    default=lambda: os.environ.get("PALJE_SOURCE_ATLASSIAN_API_TOKEN", ""),
 )
 # TODO: page id and title could be repeatable? (for copying multiple pages)
 @click.option(
     "--page-id",
     help="Id of the page to copy. May be used instead of --page-title and "
-    + "--confluence-space-key.",
+    + "--source-confluence-space-key.",
     callback=_check_page_identification_params,
     is_eager=True,  # makes sure --page-id seen before other page identifying params
 )
 @click.option(
     "--page-title",
     help="Title of the page to copy (instead of --page-id). "
-    + "Requires --confluence-space-key to be available, too.",
+    + "Requires --source-confluence-space-key to be available, too. "
+    + 'Enter the value in "double quotes" if it contains whitespace.',
     callback=_check_page_identification_params,
 )
 #
@@ -140,16 +141,18 @@ def _check_page_identification_params(ctx, param, value):
 )
 @click.option(
     "--page-title-prefix",
-    help="Leading string to add to the originial page title when creating a copy. "
+    help="Leading string to add to the original page title when creating a copy. "
     + "Applied to all copied pages exactly as given, so include any "
-    + "separating whitespace into the value if you need it.",
+    + "separating whitespace into the value if you need it. "
+    + 'Enter the value in "double quotes" if it contains whitespace.',
     required=False,
 )
 @click.option(
     "--page-title-postfix",
-    help="Trailing string to add to the originial page title when creating a copy. "
+    help="Trailing string to add to the original page title when creating a copy. "
     + "Applied to all copied pages exactly as given, so include any "
-    + "separating whitespace into the value if you need it.",
+    + "separating whitespace into the value if you need it. "
+    + 'Enter the value in "double quotes" if it contains whitespace.',
     required=False,
 )
 @click.option(
@@ -166,10 +169,10 @@ def _check_page_identification_params(ctx, param, value):
 @click.pass_context
 def copy_confluence_page(
     ctx: click.Context,
-    confluence_root_url: str,
-    confluence_space_key: str,
-    atlassian_user_id: str,
-    atlassian_api_token: str,
+    source_confluence_root_url: str,
+    source_confluence_space_key: str,
+    source_atlassian_user_id: str,
+    source_atlassian_api_token: str,
     page_id: int,
     page_title: str,
     target_confluence_root_url: str,
@@ -197,8 +200,8 @@ def copy_confluence_page(
     copy_children = no_children == False
 
     if not page_id:
-        if not confluence_space_key:
-            confluence_space_key = click.prompt("Source Confluence space key")
+        if not source_confluence_space_key:
+            source_confluence_space_key = click.prompt("Source Confluence space key")
         if not page_title:
             page_title = click.prompt("Source Confluence page title")
 
@@ -208,14 +211,16 @@ def copy_confluence_page(
     page_sorting_pt = ProgressTracker(on_step_callback=show_page_sorting_progress)
     page_copying_pt = ProgressTracker(on_step_callback=_display_page_copying_progress)
 
-    if not confluence_root_url:
-        confluence_root_url = click.prompt("Source Confluence root URL")
+    if not source_confluence_root_url:
+        source_confluence_root_url = click.prompt("Source Confluence root URL")
 
-    if not atlassian_user_id:
-        atlassian_user_id = click.prompt("Atlassian user ID for source Confluence")
+    if not source_atlassian_user_id:
+        source_atlassian_user_id = click.prompt(
+            "Atlassian user ID for source Confluence"
+        )
 
-    if not atlassian_api_token:
-        atlassian_api_token = click.prompt(
+    if not source_atlassian_api_token:
+        source_atlassian_api_token = click.prompt(
             "Atlassian API token for source Confluence", hide_input=True
         )
 
@@ -240,8 +245,8 @@ def copy_confluence_page(
     # Source and target space are the same -cases
 
     try:
-        if confluence_root_url == target_confluence_root_url:
-            if confluence_space_key == target_confluence_space_key:
+        if source_confluence_root_url == target_confluence_root_url:
+            if source_confluence_space_key == target_confluence_space_key:
                 if not (page_title_prefix or page_title_postfix):
                     message = (
                         "Due to Confluence page titles having to be unique within a space, "
@@ -252,14 +257,14 @@ def copy_confluence_page(
 
         asyncio.run(
             _copy_confluence_page_async(
-                confluence_root_url=confluence_root_url,
-                atlassian_user_id=atlassian_user_id,
-                atlassian_api_token=atlassian_api_token,
-                confluence_space_key=confluence_space_key,
-                target_confluence_root_url=target_confluence_root_url,
-                target_atlassian_user_id=target_atlassian_user_id,
-                target_atlassian_api_token=target_atlassian_api_token,
-                target_confluence_space_key=target_confluence_space_key,
+                src_confluence_root_url=source_confluence_root_url,
+                src_atlassian_user_id=source_atlassian_user_id,
+                src_atlassian_api_token=source_atlassian_api_token,
+                src_confluence_space_key=source_confluence_space_key,
+                tgt_confluence_root_url=target_confluence_root_url,
+                tgt_atlassian_user_id=target_atlassian_user_id,
+                tgt_atlassian_api_token=target_atlassian_api_token,
+                tgt_confluence_space_key=target_confluence_space_key,
                 page_id=page_id,
                 page_title=page_title,
                 work_dir=work_dir,
@@ -281,16 +286,16 @@ def copy_confluence_page(
 
 
 async def _copy_confluence_page_async(
-    confluence_root_url,
-    atlassian_user_id,
-    atlassian_api_token,
-    target_confluence_root_url,
-    target_atlassian_user_id,
-    target_atlassian_api_token,
+    src_confluence_root_url,
+    src_atlassian_user_id,
+    src_atlassian_api_token,
+    tgt_confluence_root_url,
+    tgt_atlassian_user_id,
+    tgt_atlassian_api_token,
     page_id: int,
     page_title: str,
-    confluence_space_key: str,
-    target_confluence_space_key: str,
+    src_confluence_space_key: str,
+    tgt_confluence_space_key: str,
     work_dir: pathlib.Path,
     copy_children: bool,
     page_title_prefix: str,
@@ -308,15 +313,15 @@ async def _copy_confluence_page_async(
 
     try:
         src_confluence = ConfluenceRestClientAsync(
-            root_url=confluence_root_url,
-            user_id=atlassian_user_id,
-            api_token=atlassian_api_token,
+            root_url=src_confluence_root_url,
+            user_id=src_atlassian_user_id,
+            api_token=src_atlassian_api_token,
         )
 
         tgt_confluence = ConfluenceRestClientAsync(
-            root_url=target_confluence_root_url,
-            user_id=target_atlassian_user_id,
-            api_token=target_atlassian_api_token,
+            root_url=tgt_confluence_root_url,
+            user_id=tgt_atlassian_user_id,
+            api_token=tgt_atlassian_api_token,
         )
 
         try:
@@ -324,18 +329,18 @@ async def _copy_confluence_page_async(
                 f"Checking Confluence permissions for page creation ... ", nl=False
             )
             is_writable_space = await is_page_creation_allowed_async(
-                confluence_client=tgt_confluence, space_key=target_confluence_space_key
+                confluence_client=tgt_confluence, space_key=tgt_confluence_space_key
             )
         except ConfluenceRESTError as err:
             click.echo("FAILED")
             raise click.ClickException(
                 f"Failed to check page creation permissions for space "
-                + f"'{target_confluence_space_key}'."
+                + f"'{tgt_confluence_space_key}'."
             ) from err
         click.echo("OK" if is_writable_space else "FAILED")
         if not is_writable_space:
             raise click.ClickException(
-                f"Space '{target_confluence_space_key}' doesn't allow page creation."
+                f"Space '{tgt_confluence_space_key}' doesn't allow page creation."
             )
 
         try:
@@ -345,15 +350,15 @@ async def _copy_confluence_page_async(
                     confluence_client=src_confluence,
                     page_id=page_id,
                 )
-            elif page_title and confluence_space_key:
+            elif page_title and src_confluence_space_key:
                 page_to_copy = await get_confluence_page_by_title_async(
                     confluence_client=src_confluence,
-                    space_key=confluence_space_key,
+                    space_key=src_confluence_space_key,
                     page_title=page_title,
                 )
             else:
                 raise click.ClickException(
-                    "Either --page-id or --page-title AND --confluence-space-key "
+                    "Either --page-id OR --page-title and --source-confluence-space-key "
                     + "must be provided."
                 )
         except ConfluenceRESTError as err:
@@ -389,7 +394,7 @@ async def _copy_confluence_page_async(
 
         duplicates = await check_for_duplicate_page_titles_async(
             confluence_client=tgt_confluence,
-            space_key=target_confluence_space_key,
+            space_key=tgt_confluence_space_key,
             page_titles=source_page_titles,
             page_title_prefix=page_title_prefix,
             page_title_postfix=page_title_postfix,
@@ -444,9 +449,9 @@ async def _copy_confluence_page_async(
         new_page_id = await copy_confluence_pages_async(
             root_page=page_to_copy,
             src_confluence_client=src_confluence,
-            confluence_space_key=confluence_space_key,
+            confluence_space_key=src_confluence_space_key,
             tgt_confluence_client=tgt_confluence,
-            target_confluence_space_key=target_confluence_space_key,
+            target_confluence_space_key=tgt_confluence_space_key,
             work_dir=work_dir_root,
             copy_children=copy_children,
             page_title_prefix=page_title_prefix,
