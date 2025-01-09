@@ -136,7 +136,8 @@ def _check_page_identification_params(ctx, param, value):
 # endregion Target Confluence details
 @click.option(
     "--no-children",
-    help="Copy the given page and all child pages it may have.",
+    help="Only copy the given page ignoring any child pages it may have. "
+    "By default, all child pages are copied recursively as well.",
     is_flag=True,
 )
 @click.option(

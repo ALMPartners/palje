@@ -16,10 +16,15 @@ def test_sql_queries_should_be_read_succesfully(mssql_db):
     assert "schema_descriptions" in queries
     assert "object_descriptions" in queries
     assert "available_extended_properties" in queries
-    assert "select_template" in queries
-    assert "from_template" in queries
-    assert "table_columns" in queries
-    assert "view_columns" in queries
+
+    assert "table_col_ext_prop_value_select_template" in queries
+    assert "table_col_ext_prop_joiner_template" in queries
+    assert "table_col_select_body" in queries
+
+    assert "view_col_ext_prop_value_select_template" in queries
+    assert "view_col_ext_prop_joiner_template" in queries
+    assert "view_col_select_body" in queries
+
     assert "routine_parameters" in queries
     assert "object_indexes" in queries
     assert "index_columns" in queries
@@ -162,7 +167,7 @@ class TestWithSQLServer:
     def test_get_object_columns_should_return_list_of_dicts_of_columns(
         self, connected_db: MSSQLDatabase
     ):
-        cols = connected_db.get_object_columns("store", "Tables", "Clients")
+        cols = connected_db.get_object_column_info("store", "Tables", "Clients")
         assert len(cols) == 8
         assert cols[0] == {
             "Column": "id",
@@ -180,7 +185,7 @@ class TestWithSQLServer:
     def test_get_object_columns_should_return_empty_list_if_no_such_object(
         self, connected_db: MSSQLDatabase
     ):
-        cols = connected_db.get_object_columns("store", "Tables", "no_such_object")
+        cols = connected_db.get_object_column_info("store", "Tables", "no_such_object")
         assert cols == []
 
     def test_get_object_indexes_should_return_list_of_dicts_of_indexes(

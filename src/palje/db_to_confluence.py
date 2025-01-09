@@ -1,45 +1,55 @@
+from __future__ import annotations
 import asyncio
+from dataclasses import dataclass, field
+import json
+import pathlib
 from typing import Coroutine
+
+import aiofile
 from palje.confluence import storage_format
+from palje.confluence.confluence_ops import (
+    create_confluence_page_from_file_async,
+)
 from palje.confluence.confluence_rest import ConfluenceRestClientAsync
+from palje.confluence.utils import to_safe_filename
 from palje.progress_tracker import ProgressTracker
 from palje.mssql.mssql_database import MSSQLDatabase, DATABASE_OBJECT_TYPES
-
-# Maximum number of concurrent tasks.
-# The database seems to be the bottleneck. Adjust this higher if the queries can be made
-# more efficient or/and less frequent.
-DEFAULT_CONCURRENCY_LIMIT = 2
 
 # region Confluence documentation writing
 
 
-async def document_db_to_confluence_async(
-    confluence_client: ConfluenceRestClientAsync,
+@dataclass
+class ConfluencePageMapEntry:
+    """Confluence page map entry."""
+
+    page_title: str
+    page_content_file: pathlib.Path
+    child_pages: list[ConfluencePageMapEntry] = field(default_factory=list)
+
+
+async def create_confluence_db_doc_files(
     db_client: MSSQLDatabase,
-    confluence_space_key: str,
+    output_dir: pathlib.Path,
     parent_page_title: str | None = None,
     schemas: list[str] | None = None,
     additional_databases: list[str] | None = None,
     progress_tracker: ProgressTracker | None = None,
-    use_concurrency: bool = False,
-    max_concurrency: int = DEFAULT_CONCURRENCY_LIMIT,
-) -> None:
-    """Collect documentation from the database and upload it to Confluence.
+) -> pathlib.Path:
+    """Reads database metadata and creates Confluence page files out of it.
+
 
     Arguments:
     ----------
 
-    confluence_client : ConfluenceRestClientAsync
-        Confluence client instance.
-
     db_client : MSSQLDatabase
         Database client instance.
 
-    confluence_space_key : str
-        Confluence space key.
+    output_dir : pathlib.Path
+        Output directory for the Confluence page files.
 
     parent_page_title : str, optional
-        Title of the parent page. If not given, root page is created.
+        Title of the parent page. If not given, default title will be generated from
+        the database name.
 
     schemas : list[str], optional
         List of schemas to document. If not given, all schemas are documented.
@@ -51,291 +61,234 @@ async def document_db_to_confluence_async(
     progress_tracker : ProgressTracker, optional
         Progress tracker instance. If not given, progress is not tracked.
 
-    use_concurrency : bool, optional
-        Whether to use concurrency at all. Using concurrency is much more performant
-        but unfortunately it effectively puts new pages in random order in Confluence.
-        Existing pages keep their positions. Unfortunately Confluence REST API doesn't
-        support re-arranging of pages (see Confluence ticket CONFCLOUD-40101).
 
-    max_concurrency : int, optional
-        Concurrency limit. Limits async task creation but even with value 1
-        there is still some concurrency. Large values may overload the database.
-        Only takes effect with use_concurrency set to True.
+    Returns:
+    --------
 
+    pathlib.Path
+        Path to the generated page map json file that describes the hiearchy.
     """
 
-    async with confluence_client:
-        confluence_space_id = await confluence_client.get_space_id_async(
-            confluence_space_key
-        )
-        schemas = collect_schemas_to_document(db_client, schemas)
+    schemas = collect_schemas_to_document(db_client, schemas)
 
-        dependent_databases = collect_databases_to_query_dependencies(
-            database_client=db_client,
-            available_databases=db_client.get_databases(),
-            databases_to_include=additional_databases,
-        )
-        object_dependencies = db_client.get_object_dependencies(dependent_databases)
+    dependent_databases = collect_databases_to_query_dependencies(
+        database_client=db_client,
+        available_databases=db_client.get_databases(),
+        databases_to_include=additional_databases,
+    )
+    object_dependencies = db_client.get_object_dependencies(dependent_databases)
 
-        root_page_title = (
-            parent_page_title
-            if parent_page_title
-            else create_root_page_title(db_client.database)
-        )
+    # TODO: page title prefix / postfix
+    root_page_title = (
+        parent_page_title
+        if parent_page_title
+        else create_root_page_title(db_client.database)
+    )
+    if progress_tracker:
+        progress_tracker.target_total = 1
 
-        root_page_content = storage_format.objects_list()
-        progress_tracker.target_total += 1
-        root_page_id = await confluence_client.upsert_page_async(
-            page_title=root_page_title,
-            page_content=root_page_content,
-            space_id=confluence_space_id,
-        )
+    root_page_content = storage_format.objects_list()
 
-        tasks = create_async_subpage_upsert_tasks(
-            db_client,
-            confluence_client,
-            confluence_space_id,
-            schemas,
-            object_dependencies,
-            root_page_id,
-            progress_tracker=progress_tracker,
-            use_concurrency=use_concurrency,
-            max_concurrency=max_concurrency,
-        )
+    root_page_filename = output_dir / f"{to_safe_filename(root_page_title)}.txt"
 
-        if use_concurrency:
-            await asyncio.gather(*tasks)
-        else:
-            for task in tasks:
-                await task
+    async with aiofile.async_open(root_page_filename, "w") as f:
+        await f.write(root_page_content)
+    if progress_tracker:
+        progress_tracker.step(passed=True)
 
+    root_page_entry = ConfluencePageMapEntry(
+        page_title=root_page_title, page_content_file=root_page_filename
+    )
 
-def create_async_subpage_upsert_tasks(
-    database_client: MSSQLDatabase,
-    confluence_client: ConfluenceRestClientAsync,
-    space_id: str,
-    schemas: list[str],
-    object_dependencies: dict[str, list[str]],
-    root_page_id: int,
-    progress_tracker: ProgressTracker | None = None,
-    use_concurrency: bool = False,
-    max_concurrency: int = DEFAULT_CONCURRENCY_LIMIT,
-) -> list[Coroutine]:
-    """Create async co-routines for creating or updating subpages for each
-    schema in schemas.
+    progress_tracker.target_total += len(schemas)
 
-    Arguments:
-    ----------
-
-    database_client : MSSQLDatabase
-        Database client instance.
-
-    confluence_client : ConfluenceRestClientAsync
-        Confluence client instance.
-
-    space_id : str
-        Confluence space ID.
-
-    schemas : list[str]
-        List of schemas to document.
-
-    object_dependencies : dict[str, list[str]]
-        Dictionary of object dependencies.
-
-    root_page_id : int
-        ID of the root page.
-
-    progress : ProgressTracker, optional
-        Progress tracker instance. If not given, progress is not tracked.
-
-    use_concurrency : bool, optional
-        Whether to use concurrency.
-
-    max_concurrency : int, optional
-        Maximum number of concurrent tasks. Only takes effect with use_concurrency.
-
-    """
-
-    tasks = []
-    semaphore = asyncio.Semaphore(max_concurrency)
     for schema in schemas:
-        tasks.append(
-            create_or_update_subpages_async(
-                database_client,
-                semaphore,
-                confluence_client,
-                space_id,
-                schema,
-                object_dependencies,
-                root_page_id,
-                progress_tracker=progress_tracker,
-                use_concurrency=use_concurrency,
-            )
-        )
-    return tasks
-
-
-def create_async_object_page_upsert_tasks(
-    objects: list[str],
-    object_type: str,
-    database_client: MSSQLDatabase,
-    confluence_client: ConfluenceRestClientAsync,
-    space_id: int,
-    schema: str,
-    object_dependencies: dict[str, list[str]],
-    parent_page_id: int,
-) -> list[Coroutine]:
-    """Create async tasks for batch creating/updating object pages.
-
-    Arguments:
-    ----------
-
-    objects : dict[str, list[str]]
-        Dictionary of objects to document.
-
-    database_client : MSSQLDatabase
-        Database client instance.
-
-    confluence_client : ConfluenceRestClientAsync
-        Confluence client instance.
-
-    space_id : str
-        Confluence space ID.
-
-    schema : str
-        Schema name.
-
-    object_dependencies : dict[str, list[str]]
-        Dictionary of object dependencies.
-
-    type_page_id : int
-        ID of the parent page.
-    """
-    tasks = []
-    for object_name in objects:
-        object_page_title = create_object_page_title(
-            database_client.database, schema, object_name
-        )
-        object_page_content = create_object_page_content(
-            database_client,
-            schema,
-            object_type,
-            object_name,
-            object_dependencies,
-        )
-        tasks.append(
-            confluence_client.upsert_page_async(
-                page_title=object_page_title,
-                page_content=object_page_content,
-                space_id=space_id,
-                parent_page_id=parent_page_id,
-            )
-        )
-    return tasks
-
-
-async def create_or_update_subpages_async(
-    database_client: MSSQLDatabase,
-    semaphore: asyncio.Semaphore,
-    confluence_client: ConfluenceRestClientAsync,
-    space_id: str,
-    schema: str,
-    object_dependencies: dict[str, list[str]],
-    root_page_id: int,
-    progress_tracker: ProgressTracker | None = None,
-    use_concurrency: bool = False,
-):
-    """Create or update subpages for the given schema.
-
-    Arguments:
-    ----------
-
-    database_client : MSSQLDatabase
-        Database client instance.
-
-    semaphore : asyncio.Semaphore
-        Semaphore for concurrency control.
-
-    confluence_client : ConfluenceRestClientAsync
-        Confluence client instance.
-
-    space_id : str
-        Confluence space ID.
-
-    schema : str
-        Schema name.
-
-    object_dependencies : dict[str, list[str]]
-        Dictionary of object dependencies.
-
-    root_page_id : int
-        ID of the root page.
-
-    progress : ProgressTracker, optional
-        Progress tracker instance. If not given, progress is not tracked.
-
-    use_concurrency : bool, optional
-        Whether to use concurrency.
-
-    """
-
-    async with semaphore:
-        # TODO: separate db reading from confluence writing?
-        # TODO: use semaphore to limit (only) db tasks?
-
-        database_name = database_client.database
-        schema_page_title = create_schema_page_title(database_name, schema)
-        schema_description = database_client.get_schema_description(schema)
+        schema_page_title = create_schema_page_title(db_client.database, schema)
+        schema_description = db_client.get_schema_description(schema)
         schema_page_content = (
             storage_format.description_header(schema_description)
             + storage_format.objects_list()
         )
-        if progress_tracker:
-            progress_tracker.target_total += 1
-        schema_page_id = await confluence_client.upsert_page_async(
-            page_title=schema_page_title,
-            page_content=schema_page_content,
-            space_id=space_id,
-            parent_page_id=root_page_id,
+
+        schema_dir = output_dir / to_safe_filename(schema_page_title)
+        schema_dir.mkdir(parents=True, exist_ok=True)
+
+        schema_page_filename = schema_dir / f"{to_safe_filename(schema_page_title)}.txt"
+        async with aiofile.async_open(schema_page_filename, "w") as f:
+            await f.write(schema_page_content)
+
+        schema_page_entry = ConfluencePageMapEntry(
+            page_title=schema_page_title, page_content_file=schema_page_filename
         )
+        root_page_entry.child_pages.append(schema_page_entry)
+
+        if progress_tracker:
+            progress_tracker.step(passed=True)
 
         # Create object type pages (Tables, Procedures, ...)
 
-        objects = collect_objects_to_document(database_client, schema)
+        objects = collect_objects_to_document(db_client, schema)
+        progress_tracker.target_total += len(objects)
+
         for object_type in objects:
+
             obj_type_page_title = create_object_type_page_title(
-                database_name, schema, object_type
+                db_client.database, schema, object_type
             )
             obj_type_page_content = storage_format.objects_list()
-            if progress_tracker:
-                progress_tracker.target_total += 1
-            obj_type_page_id = await confluence_client.upsert_page_async(
-                page_title=obj_type_page_title,
-                page_content=obj_type_page_content,
-                space_id=space_id,
-                parent_page_id=schema_page_id,
+            obj_type_dir = schema_dir / to_safe_filename(obj_type_page_title)
+            obj_type_dir.mkdir(parents=True, exist_ok=True)
+            obj_type_page_filename = (
+                obj_type_dir / f"{to_safe_filename(obj_type_page_title)}.txt"
             )
+
+            async with aiofile.async_open(obj_type_page_filename, "w") as f:
+                await f.write(obj_type_page_content)
+            if progress_tracker:
+                progress_tracker.step(passed=True)
+
+            object_type_page_entry = ConfluencePageMapEntry(
+                page_title=obj_type_page_title, page_content_file=obj_type_page_filename
+            )
+            schema_page_entry.child_pages.append(object_type_page_entry)
 
             # Create object pages under object type page
 
-            tasks = create_async_object_page_upsert_tasks(
-                objects[object_type],
-                object_type,
-                database_client,
-                confluence_client,
-                space_id,
-                schema,
-                object_dependencies,
-                obj_type_page_id,
-            )
             if progress_tracker:
-                progress_tracker.target_total += len(tasks)
+                progress_tracker.target_total += len(objects[object_type])
 
-            if use_concurrency:
-                await asyncio.gather(*tasks)
-            else:
-                for task in tasks:
-                    await task
+            for object_name in objects[object_type]:
+                object_page_title = create_object_page_title(
+                    db_client.database, schema, object_name
+                )
+                object_page_content = create_object_page_content(
+                    db_client,
+                    schema,
+                    object_type,
+                    object_name,
+                    object_dependencies,
+                )
+
+                object_page_dir = obj_type_dir / to_safe_filename(object_page_title)
+                object_page_dir.mkdir(parents=True, exist_ok=True)
+
+                object_page_filename = (
+                    obj_type_dir / f"{to_safe_filename(object_page_title)}.txt"
+                )
+                async with aiofile.async_open(object_page_filename, "w") as f:
+                    await f.write(object_page_content)
+                if progress_tracker:
+                    progress_tracker.step(passed=True)
+
+                object_page_entry = ConfluencePageMapEntry(
+                    page_title=object_page_title, page_content_file=object_page_filename
+                )
+                object_type_page_entry.child_pages.append(object_page_entry)
+
+    # recursively sort the entries
+    def _alpha_sort_page_entries(entry: ConfluencePageMapEntry) -> None:
+        entry.child_pages = sorted(entry.child_pages, key=lambda x: x.page_title)
+        for child in entry.child_pages:
+            _alpha_sort_page_entries(child)
+
+    _alpha_sort_page_entries(root_page_entry)
+
+    # convert the page map to a hierarchical dict
+    def _page_map_to_dict(entry: ConfluencePageMapEntry) -> dict:
+        return {
+            "page_title": entry.page_title,
+            "page_content_file": str(entry.page_content_file),
+            "child_pages": [_page_map_to_dict(child) for child in entry.child_pages],
+        }
+
+    page_map = _page_map_to_dict(root_page_entry)
+    # write the page map to a json file
+    page_map_file = output_dir / "palje_confluence_page_map.json"
+    async with aiofile.async_open(page_map_file, "w") as f:
+        await f.write(json.dumps(page_map))
+
+    return page_map_file
+
+
+def _create_child_page_upsert_tasks(
+    confluence_client: ConfluenceRestClientAsync,
+    confluence_space_id: str,
+    parent_page_id: int | None,
+    entry: ConfluencePageMapEntry,
+    progress_tracker: ProgressTracker | None = None,
+) -> list[Coroutine]:
+    tasks = []
+
+    for child in entry.child_pages:
+        if progress_tracker:
+            progress_tracker.target_total += 1
+        tasks.append(
+            create_confluence_pages_from_entries_recursively_async(
+                confluence_client,
+                confluence_space_id,
+                parent_page_id,
+                child,
+                progress_tracker,
+            )
+        )
+    return tasks
+
+
+async def create_confluence_pages_from_entries_recursively_async(
+    confluence_client: ConfluenceRestClientAsync,
+    confluence_space_id: str,
+    parent_page_id: int | None,
+    page_map_root_entry: ConfluencePageMapEntry,
+    progress_tracker: ProgressTracker | None = None,
+) -> int:
+    """Recursively creates Confluence pages from the page map entries.
+       Pages are created in random order and may need to be reordered afterwards.
+
+    Arguments:
+    ----------
+
+    confluence_client : ConfluenceRestClientAsync
+        Confluence client instance.
+
+    confluence_space_id : str
+        Confluence space id.
+
+    parent_page_id : int, optional
+        ID of the parent page.
+
+    entry : ConfluencePageMapEntry
+        Page map entry. May contain child pages.
+
+    progress_tracker : ProgressTracker, optional
+        Progress tracker instance. If not given, progress is not tracked.
+
+    Returns:
+    --------
+
+    int
+        ID of the created page.
+
+    """
+
+    page_id = await create_confluence_page_from_file_async(
+        confluence_client=confluence_client,
+        page_title=page_map_root_entry.page_title,
+        page_content_file=page_map_root_entry.page_content_file,
+        space_id=confluence_space_id,
+        parent_page_id=parent_page_id,
+    )
+
+    tasks = _create_child_page_upsert_tasks(
+        confluence_client,
+        confluence_space_id,
+        page_id,
+        page_map_root_entry,
+        progress_tracker=progress_tracker,
+    )
+
+    await asyncio.gather(*tasks)
+
+    return page_id
 
 
 # endregion
@@ -370,7 +323,6 @@ def collect_schemas_to_document(
     return sorted(schemas)
 
 
-# TODO: filter -> name better, make optional last parm
 def collect_databases_to_query_dependencies(
     database_client: MSSQLDatabase,
     available_databases: list[str],
@@ -407,14 +359,6 @@ def collect_objects_to_document(
     database_client: MSSQLDatabase, schema: str
 ) -> dict[str, list[str]]:
     """Get a dict of database objects in given schema.
-        Returns a dict of form
-        ```
-        {
-            'Tables': ['table_1', 'table_2'],
-            'Views': ['view_1', 'view_5'],
-            ...
-        }
-        ```
 
     Arguments:
     ----------
@@ -426,7 +370,15 @@ def collect_objects_to_document(
 
     Returns:
     --------
-    objects : dict[str, list[str]]
+    dict[str, list[str]] : dict of database objects in given schema
+        Example format:
+        ```
+        {
+            'Tables': ['table_1', 'table_2'],
+            'Views': ['view_1', 'view_5'],
+            ...
+        }
+        ```
 
     """
     objects = {}
@@ -560,7 +512,7 @@ def create_object_page_content(
     description = database_client.get_object_description(schema, object_name)
     object_page_content = storage_format.description_header(description)
     if object_type in ["Tables", "Views"]:
-        object_columns = database_client.get_object_columns(
+        object_columns = database_client.get_object_column_info(
             schema, object_type, object_name
         )
         object_page_content += storage_format.column_table(object_columns)

@@ -13,16 +13,19 @@ import sys
 from argparse import ArgumentParser
 from typing import Any
 
+from palje.cli_commands.document_cmd import _document_db_to_confluence_async
 from palje.confluence.confluence_ops import is_page_creation_allowed_async
+from palje.confluence.utils import (
+    show_db_data_collecting_progress,
+    show_page_creation_progress,
+    show_page_sorting_progress,
+)
 from palje.version import __version__ as PALJE_VERSION
 from palje.confluence.confluence_rest import (
     ConfluenceRestClientAsync,
 )
-from palje.db_to_confluence import document_db_to_confluence_async
 from palje.progress_tracker import ProgressTracker
 from palje.mssql.mssql_database import MSSQLDatabaseAuthType, MSSQLDatabase
-
-# TODO: setup and use logging instead of print
 
 
 def _ask_db_credentials(
@@ -69,7 +72,6 @@ async def main_async(argv: list[str] | None = None):
         "\x1b[33;20mUsing legacy palje CLI. Consider switching to palje2 with more "
         + "features. Use 'palje2 --help' to learn more.\x1b[0m"
     )
-    # TODO: possibility to read params from config?
     (
         confluence_url,
         space_key,
@@ -80,7 +82,6 @@ async def main_async(argv: list[str] | None = None):
         database_filter,
         driver,
         authentication,
-        max_concurrency,
     ) = parse_arguments(argv)
 
     # ============ DATABASE CONNECTION ============
@@ -125,13 +126,20 @@ async def main_async(argv: list[str] | None = None):
 
     confluence_user_id, confluence_api_token = _ask_confluence_credentials(space_key)
 
-    progress_tracker = ProgressTracker(on_step_callback=print_progress)
+    data_collect_pt = ProgressTracker(on_step_callback=show_db_data_collecting_progress)
+    # FIXME: get rid of unclear default 1's
+    confl_update_pt = ProgressTracker(
+        on_step_callback=show_page_creation_progress, target_total=1
+    )
+    confl_sort_pt = ProgressTracker(
+        on_step_callback=show_page_sorting_progress, target_total=1
+    )
 
     async with ConfluenceRestClientAsync(
         confluence_url,
         confluence_user_id,
         confluence_api_token,
-        progress_callback=progress_tracker.step,
+        progress_callback=data_collect_pt.step,
     ) as confluence_client:
         try:
             space_writable = await is_page_creation_allowed_async(
@@ -149,18 +157,21 @@ async def main_async(argv: list[str] | None = None):
             )
             quit()
 
-        await document_db_to_confluence_async(
-            confluence_client=confluence_client,
-            db_client=database_client,
-            confluence_space_key=space_key,
-            parent_page_title=parent_page,
-            schemas=schema_filter,
-            progress_tracker=progress_tracker,
-            additional_databases=database_filter,
-            max_concurrency=max_concurrency,
-        )
+    await _document_db_to_confluence_async(
+        tgt_confluence_root_url=confluence_url,
+        tgt_atlassian_user_id=confluence_user_id,
+        tgt_atlassian_api_token=confluence_api_token,
+        database_client=database_client,
+        tgt_confluence_space_key=space_key,
+        parent_page_title=parent_page,
+        schema=schema_filter,
+        dependency_db=database_filter,
+        doc_files_pt=data_collect_pt,
+        confl_update_pt=confl_update_pt,
+        confl_sort_pt=confl_sort_pt,
+    )
 
-    print(f'\rExecution time: {progress_tracker.elapsed_time:.2f} seconds.{"":<150}\n')
+    print(f'\rExecution time: {data_collect_pt.elapsed_time:.2f} seconds.{"":<150}\n')
 
 
 def parse_arguments(args):
@@ -214,12 +225,6 @@ def parse_arguments(args):
         + 'and "AAD" (Azure Active Directory login will be prompted) ',
     )
     parser.add_argument(
-        "--max-concurrency",
-        type=int,
-        default=2,
-        help="Concurrency limit. Limits db overloading.",
-    )
-    parser.add_argument(
         "--version",
         action="version",
         version=f"Palje v{PALJE_VERSION} (legacy CLI)",
@@ -236,7 +241,6 @@ def parse_arguments(args):
         args.get("dependent"),
         args.get("db_driver", "ODBC Driver 17 for SQL Server"),
         MSSQLDatabaseAuthType(args.get("authentication", "SQL")),
-        args.get("max_concurrency", None),
     )
 
 

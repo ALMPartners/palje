@@ -7,6 +7,7 @@ from tkinter import messagebox
 from pathlib import Path
 import sys
 
+from palje.cli_commands.document_cmd import _document_db_to_confluence_async
 from palje.confluence.confluence_ops import is_page_creation_allowed_async
 from palje.confluence.confluence_rest import (
     ConfluenceRestClientAsync,
@@ -21,10 +22,6 @@ from palje.gui.components.db_server_widget import (
 from palje.mssql.mssql_database import (
     MSSQLDatabaseAuthType,
     MSSQLDatabase as MSSQLDatabase,
-)
-from palje.db_to_confluence import (
-    DEFAULT_CONCURRENCY_LIMIT,
-    document_db_to_confluence_async,
 )
 from palje.progress_tracker import ProgressTracker
 from palje.version import __version__ as PALJE_VERSION
@@ -45,23 +42,13 @@ class App(tk.Tk):
     def __init__(
         self,
         start_size: tuple[int, int] = DEFAULT_WINDOW_SIZE,
-        max_concurrency: int = DEFAULT_CONCURRENCY_LIMIT,
     ):
         super().__init__()
-        self.title(
-            WINDOW_TITLE
-            + (
-                f" (MC: {max_concurrency})"
-                if max_concurrency != DEFAULT_CONCURRENCY_LIMIT
-                else ""
-            )
-        )
+        self.title(WINDOW_TITLE)
         self.iconphoto(True, tk.PhotoImage(file=ICON))
         self.geometry(f"{start_size[0]}x{start_size[1]}")
         self.configure(padx=WINDOW_PADDING, pady=WINDOW_PADDING)
-        Main(parent=self, max_concurrency=max_concurrency).pack(
-            fill=tk.BOTH, expand=True
-        )
+        Main(parent=self).pack(fill=tk.BOTH, expand=True)
 
         self.mainloop()
 
@@ -351,22 +338,20 @@ class Main(ttk.Frame):
         )
 
         try:
-            async with ConfluenceRestClientAsync(
-                self._confluence_widget.confluence_root_url,
-                self._confluence_widget.confluence_user_id,
-                self._confluence_widget.confluence_api_token,
-                progress_callback=self._progress_tracker.step,
-            ) as confluence_client:
-                await document_db_to_confluence_async(
-                    confluence_client=confluence_client,
-                    db_client=self._mssql_database,
-                    confluence_space_key=self._confluence_widget.confluence_space_key,
-                    parent_page_title=self._confluence_widget.confluence_parent_page,
-                    schemas=self._db_browser_widget.selected_schemas,
-                    progress_tracker=self._progress_tracker,
-                    additional_databases=[],
-                    max_concurrency=self._max_concurrency,
-                )
+
+            await _document_db_to_confluence_async(
+                tgt_confluence_root_url=self._confluence_widget.confluence_root_url,
+                tgt_atlassian_user_id=self._confluence_widget.confluence_user_id,
+                tgt_atlassian_api_token=self._confluence_widget.confluence_api_token,
+                database_client=self._mssql_database,
+                tgt_confluence_space_key=self._confluence_widget.confluence_space_key,
+                parent_page_title=self._confluence_widget.confluence_parent_page,
+                schema=self._db_browser_widget.selected_schemas,
+                confl_update_pt=self._progress_tracker,
+                doc_files_pt=self._progress_tracker,
+                confl_sort_pt=self._progress_tracker,
+                dependency_db=[],
+            )
 
             messagebox.showinfo(
                 "Execution complete",
@@ -399,12 +384,6 @@ def parse_args() -> argparse.Namespace:
         + "- A Swiss army knife for managing documentation in Confluence ."
     )
     parser.add_argument(
-        "--max-concurrency",
-        type=int,
-        default=DEFAULT_CONCURRENCY_LIMIT,
-        help="Concurrency limit. Prevents database overloading.",
-    )
-    parser.add_argument(
         "--version",
         action="version",
         version=f"Palje GUI v{PALJE_VERSION}",
@@ -413,8 +392,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main():
-    args = parse_args()
-    _ = App(max_concurrency=args.max_concurrency)
+    _ = App()
 
 
 if __name__ == "__main__":

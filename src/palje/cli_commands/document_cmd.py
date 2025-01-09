@@ -1,26 +1,43 @@
 """ A Click command for documenting database objects to Confluence. """
 
 import asyncio
+import json
 import os
+import pathlib
+import tempfile
+import time
 import click
 
-from palje.confluence.confluence_ops import is_page_creation_allowed_async
+from palje.confluence.confluence_ops import (
+    is_page_creation_allowed_async,
+    sort_child_pages_alphabetically_async,
+)
 from palje.confluence.confluence_rest import ConfluenceRestClientAsync
-from palje.db_to_confluence import document_db_to_confluence_async
+from palje.confluence.utils import (
+    show_db_data_collecting_progress,
+    show_page_creation_progress,
+    show_page_sorting_progress,
+)
+from palje.db_to_confluence import (
+    ConfluencePageMapEntry,
+    create_confluence_db_doc_files,
+    create_confluence_pages_from_entries_recursively_async,
+)
 from palje.mssql.mssql_database import MSSQLDatabaseAuthType, MSSQLDatabase
 from palje.progress_tracker import ProgressTracker
 
-
-def _display_progress(pt: ProgressTracker):
-    """Print current progress to the console."""
-    click.echo(
-        f"\rDocumenting database objects: {pt.passed} / {pt.target_total}"
-        + f" ... {pt.elapsed_time:.2f}s ... {pt.message: <150}",
-        nl=False,
-    )
-
-
 # TODO: Fix issue with [default: (dynamic)] in help text
+
+
+# TODO: Move to utils or similar
+def _page_map_dict_to_entries(d: dict) -> ConfluencePageMapEntry:
+    """Recursively convert a page map dict to ConfluencePageMapEntry hierarchy"""
+    entry = ConfluencePageMapEntry(
+        page_title=d["page_title"],
+        page_content_file=pathlib.Path(d["page_content_file"]),
+    )
+    entry.child_pages = [_page_map_dict_to_entries(child) for child in d["child_pages"]]
+    return entry
 
 
 @click.command(
@@ -30,8 +47,6 @@ def _display_progress(pt: ProgressTracker):
     + " all child pages.",
     name="document",
 )
-
-# TODO: move conf auth params to context (every palje command needs these?)
 @click.option(
     "--target-confluence-root-url",
     help="Confluence root URL. Optionally read from env var "
@@ -128,20 +143,12 @@ def _display_progress(pt: ProgressTracker):
     + "Use multiple times to specify multiple databases.",
 )
 @click.option(
-    "--use-concurrency",
-    default=False,
-    is_flag=True,
-    show_default=True,
-    help="Improve performance by creating/updating multiple pages at the same time. "
-    + "Unfortunately this effectively puts new pages in random order. Confluence REST "
-    + "API doesn't support re-arranging of pages (CONFCLOUD-40101).",
-)
-@click.option(
-    "--max-concurrency",
-    default=2,
-    show_default=True,
-    help="Concurrency limit. Higher number may improve performance but can also lead "
-    + "to unexpected failures. Only has effect with --use-concurrency.",
+    "--work-dir",
+    help="Optional path to a directory where the work files will be stored. "
+    + "Given directory is not removed after the operation. "
+    + "If not given, uses a system provided temporary directory.",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, writable=True),
 )
 def document_db_to_confluence(
     target_confluence_root_url: str,
@@ -157,8 +164,7 @@ def document_db_to_confluence(
     parent_page_title: str,
     schema: tuple[str, ...],
     dependency_db: tuple[str, ...],
-    use_concurrency: bool,
-    max_concurrency: int,
+    work_dir: pathlib.Path | None,
 ) -> int:
     """Document database objects to Confluence.
 
@@ -196,8 +202,10 @@ def document_db_to_confluence(
         The password for the db_username. Not relevant to all auth types.
 
     parent_page_title : str
-        The title of the parent page in Confluence. Empty value will be replaced
-        with a default name derived from the database name.
+        The title of an existing parent page in Confluence. If not given, a the
+        documentation is placed in the space root under a page with title derived from
+        the database name. Content of the parent page will be overwritten with a
+        table of contents to the underlying documention.
 
     schema : tuple[str, ...]
         The schemas to document.
@@ -294,8 +302,16 @@ def document_db_to_confluence(
             + f"Did you mean '{suggested_db}'?"
         )
 
-    progress_tracker = ProgressTracker(on_step_callback=_display_progress)
+    data_collect_pt = ProgressTracker(on_step_callback=show_db_data_collecting_progress)
+    # FIXME: get rid of unclear default 1's
+    confl_update_pt = ProgressTracker(
+        on_step_callback=show_page_creation_progress, target_total=1
+    )
+    confl_sort_pt = ProgressTracker(
+        on_step_callback=show_page_sorting_progress, target_total=1
+    )
 
+    start = time.perf_counter()
     ret_val = 0
     try:
         asyncio.run(
@@ -308,19 +324,22 @@ def document_db_to_confluence(
                 parent_page_title,
                 list(set(schema)),
                 list(set(dependency_db)),
-                progress_tracker,
-                use_concurrency,
-                max_concurrency,
+                confl_update_pt=confl_update_pt,
+                doc_files_pt=data_collect_pt,
+                confl_sort_pt=confl_sort_pt,
+                work_dir=work_dir,
             )
         )
         click.echo()
+        end = time.perf_counter()
+        elapsed_time = end - start
         click.echo(
             (
-                "Database documentation completed."
-                + f" Total pages affected: {progress_tracker.completed}."
+                f"Database documentation completed in {elapsed_time:.03f} seconds."
+                + f" Total pages affected: {confl_update_pt.completed}."
                 + (
-                    f" ({progress_tracker.failed} failures)"
-                    if progress_tracker.failed
+                    f" ({confl_update_pt.failed} failures)"
+                    if confl_update_pt.failed
                     else ""
                 )
             )
@@ -343,16 +362,26 @@ async def _document_db_to_confluence_async(
     parent_page_title: str,
     schema: tuple[str, ...],
     dependency_db: tuple[str, ...],
-    progress_tracker: ProgressTracker,
-    use_concurrency: bool,
-    max_concurrency: int,
+    doc_files_pt: ProgressTracker,
+    confl_update_pt: ProgressTracker,
+    confl_sort_pt: ProgressTracker,
+    work_dir: pathlib.Path | None = None,
 ):
+
+    if not work_dir:
+        tmp_work_dir = tempfile.TemporaryDirectory()
+        work_dir_root = pathlib.Path(tmp_work_dir.name)
+        click.echo(f"Using temporary work dir: {work_dir_root.absolute()}")
+    else:
+        work_dir_root = pathlib.Path(work_dir)
+
     async with ConfluenceRestClientAsync(
         tgt_confluence_root_url,
         tgt_atlassian_user_id,
         tgt_atlassian_api_token,
-        progress_callback=progress_tracker.step,
+        progress_callback=doc_files_pt.step,
     ) as confluence_client:
+
         click.echo(f"Checking Confluence permissions for page creation ... ", nl=False)
         is_writable_space = await is_page_creation_allowed_async(
             confluence_client=confluence_client, space_key=tgt_confluence_space_key
@@ -363,14 +392,64 @@ async def _document_db_to_confluence_async(
                 f"Space key#{tgt_confluence_space_key} doesn't allow page creation."
             )
 
-        await document_db_to_confluence_async(
-            confluence_client=confluence_client,
+        confluence_space_id = await confluence_client.get_space_id_async(
+            space_key=tgt_confluence_space_key
+        )
+
+        if parent_page_title:
+            parent_page_id = await confluence_client.get_page_id_async(
+                space_id=confluence_space_id, page_title=parent_page_title
+            )
+            if not parent_page_id:
+                raise click.ClickException(
+                    f"Parent page '{parent_page_title}' not found in space '{tgt_confluence_space_key}'."
+                )
+        else:
+            parent_page_id = None
+
+        page_map_file = await create_confluence_db_doc_files(
             db_client=database_client,
-            confluence_space_key=tgt_confluence_space_key,
+            output_dir=work_dir_root,
             parent_page_title=parent_page_title,
-            schemas=list(set(schema)),
-            additional_databases=list(set(dependency_db)),
-            progress_tracker=progress_tracker,
-            use_concurrency=use_concurrency,
-            max_concurrency=max_concurrency,
+            schemas=schema,
+            additional_databases=dependency_db,
+            progress_tracker=doc_files_pt,
+        )
+
+    click.echo()
+    async with ConfluenceRestClientAsync(
+        tgt_confluence_root_url,
+        tgt_atlassian_user_id,
+        tgt_atlassian_api_token,
+        progress_callback=confl_update_pt.step,
+    ) as confluence_client:
+
+        # Read page map file
+        with open(page_map_file, "r") as f:
+            page_map_dict = json.loads(f.read())
+
+        page_map_root_entry = _page_map_dict_to_entries(page_map_dict)
+
+        root_page_id = await create_confluence_pages_from_entries_recursively_async(
+            confluence_client=confluence_client,
+            confluence_space_id=confluence_space_id,
+            parent_page_id=parent_page_id,
+            page_map_root_entry=page_map_root_entry,
+            progress_tracker=confl_update_pt,
+        )
+
+    click.echo()
+    async with ConfluenceRestClientAsync(
+        tgt_confluence_root_url,
+        tgt_atlassian_user_id,
+        tgt_atlassian_api_token,
+        progress_callback=confl_sort_pt.step,
+    ) as confluence_client:
+
+        await sort_child_pages_alphabetically_async(
+            confluence_client=confluence_client,
+            page_id=root_page_id,
+            recursive=True,
+            case_sensitive=False,
+            progress_tracker=confl_sort_pt,
         )

@@ -389,10 +389,124 @@ class MSSQLDatabase:
         finally:
             cursor.close()
 
-    def get_object_columns(
+    def _get_view_columns(
+        self, schema_name: str, view_name: str
+    ) -> list[dict[str, str]]:
+        """Return list of dicts of view columns and their properties.
+
+        Arguments:
+        ----------
+
+        schema_name : str
+            Schema name of the view.
+
+        view_name : str
+            Name of the view.
+
+        Returns:
+
+        list[dict[str, str]]   List of dicts of columns and their properties.
+        """
+
+        extended_properties = self.get_available_extended_properties(
+            schema_name, view_name
+        )
+
+        select_addition = ""
+        from_addition = ""
+
+        for index, extended_property in enumerate(extended_properties):
+            select_addition = (
+                select_addition
+                + " "
+                + self._queries["view_col_ext_prop_value_select_template"].format(
+                    index, extended_property
+                )
+            )
+            from_addition = (
+                from_addition
+                + " "
+                + self._queries["view_col_ext_prop_joiner_template"].format(
+                    index, extended_property
+                )
+            )
+        query = self._queries["view_col_select_body"].format(
+            select_addition, from_addition
+        )
+
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(query, (schema_name, view_name))
+            result = []
+            for row in cursor.fetchall():
+                keys = [col[0] for col in row.cursor_description]
+                values = [str(cell) for cell in row]
+                result.append(dict(zip(keys, values)))
+            return result
+        finally:
+            cursor.close()
+
+    def _get_table_columns(
+        self, schema_name: str, table_name: str
+    ) -> list[dict[str, str]]:
+        """Return list of dicts of table columns and their properties.
+
+        Arguments:
+        ----------
+
+        schema_name : str
+            Schema name of the table.
+
+        table_name : str
+            Name of the table.
+
+        Returns:
+        --------
+        list[dict[str, str]]   List of dicts of columns and their properties.
+
+        """
+        extended_properties = self.get_available_extended_properties(
+            schema_name, table_name
+        )
+
+        select_addition = ""
+        from_addition = ""
+
+        for index, extended_property in enumerate(extended_properties):
+            select_addition = (
+                select_addition
+                + " "
+                + self._queries["table_col_ext_prop_value_select_template"].format(
+                    index, extended_property
+                )
+            )
+            from_addition = (
+                from_addition
+                + " "
+                + self._queries["table_col_ext_prop_joiner_template"].format(
+                    index, extended_property
+                )
+            )
+        query = self._queries["table_col_select_body"].format(
+            select_addition, from_addition
+        )
+
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute(query, (schema_name, table_name))
+            result = []
+            for row in cursor.fetchall():
+                keys = [col[0] for col in row.cursor_description]
+                values = [str(cell) for cell in row]
+                result.append(dict(zip(keys, values)))
+            return result
+        finally:
+            cursor.close()
+
+    def get_object_column_info(
         self, schema, object_type, object_name
     ) -> list[dict[str, str]]:
-        """Return list of dicts of database columns and their properties.
+        """Return list of dicts of object's columns and their properties.
 
         Arguments:
         ----------
@@ -410,46 +524,24 @@ class MSSQLDatabase:
         --------
         list[dict[str, str]]   List of dicts of columns and their properties.
         """
-        # Complete the query to fetch all available extended properties
-        # with object metadata
-        # Additions are made to SELECT and FROM clauses
-        extended_properties = self.get_available_extended_properties(
-            schema, object_name
-        )
-        select_addition = ""
-        from_addition = ""
-        for extended_property in extended_properties:
-            select_addition = (
-                select_addition
-                + " "
-                + self._queries["select_template"].format(extended_property)
-            )
-            from_addition = (
-                from_addition
-                + " "
-                + self._queries["from_template"].format(extended_property)
-            )
-        if object_type == "Tables":
-            query = self._queries["table_columns"].format(
-                select_addition, from_addition
-            )
-        elif object_type == "Views":
-            query = self._queries["view_columns"].format(select_addition, from_addition)
-        # Finally execute the query to retrieve metadata and extended properties
-        cursor = self._connection.cursor()
-        try:
-            cursor.execute(query, (self._database, schema, object_name))
-            result = []
-            for row in cursor.fetchall():
-                keys = [col[0] for col in row.cursor_description]
-                values = [str(cell) for cell in row]
-                result.append(dict(zip(keys, values)))
-            return result
-        finally:
-            cursor.close()
+
+        # start = time.perf_counter()
+
+        if object_type == "Views":
+            columns = self._get_view_columns(schema, object_name)
+
+        else:
+            columns = self._get_table_columns(schema, object_name)
+
+        # end = time.perf_counter()
+        # elapsed_time = (end - start)
+        # print(f"    -- get_object_column_info {elapsed_time:.03f} secs.")
+
+        return columns
 
     def get_object_indexes(self, schema, object_name) -> list[dict[str, str]]:
         """Return list of dicts of object indexes."""
+
         cursor = self._connection.cursor()
         try:
             cursor.execute(self._queries["object_indexes"], (schema, object_name))

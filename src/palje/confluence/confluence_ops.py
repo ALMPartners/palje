@@ -247,8 +247,6 @@ async def sort_child_pages_alphabetically_async(
         progress_tracker.target_total += len(child_pages)
 
     if len(child_pages) == 0:
-        if progress_tracker and len(child_pages) == 1:
-            progress_tracker.step(passed=True, message="no children")
         semaphore.release()
         return
 
@@ -265,16 +263,12 @@ async def sort_child_pages_alphabetically_async(
         await confluence_client.move_page_async(
             wanted_first_page.id, "before", current_first_page.id
         )
-    if progress_tracker:
-        progress_tracker.step(passed=True, message=wanted_first_page.title)
 
     # Move the rest of the pages after the first in correct order
     last_sorted_id = wanted_first_page.id
     for page in sorted_children[1:]:
         await confluence_client.move_page_async(page.id, "after", last_sorted_id)
         last_sorted_id = page.id
-        if progress_tracker:
-            progress_tracker.step(passed=True, message=page.title)
 
     semaphore.release()
 
@@ -578,6 +572,54 @@ async def create_confluence_page_async(
     return page_id
 
 
+async def create_confluence_page_from_file_async(
+    confluence_client: ConfluenceRestClientAsync,
+    page_title: str,
+    page_content_file: pathlib.Path,
+    space_id: str,
+    parent_page_id: int | None = None,
+) -> int:
+    """Creates a Confluence page from file contents. The file should contain only proper
+       Confluence content - it is not validated in any way!
+
+    Arguments:
+    ----------
+
+    confluence_client : ConfluenceRestClientAsync
+        Confluence client instance.
+
+    page_title : str
+        Page title.
+
+    page_content_file : pathlib.Path
+        Path to the page content file.
+
+    space_id : str
+        Confluence space ID.
+
+    parent_page_id : int, optional
+        ID of the parent page.
+
+    Returns:
+    --------
+
+    int
+        ID of the created page.
+
+    """
+
+    async with aiofile.async_open(page_content_file, "r") as f:
+        page_content = await f.read()
+
+    return await confluence_client.upsert_page_async(
+        page_title=page_title,
+        page_content=page_content,
+        space_id=space_id,
+        parent_page_id=parent_page_id,
+    )
+
+
+# TODO: is this really needed?
 async def update_confluence_page_async(
     confluence_client: ConfluenceRestClientAsync, page: ConfluencePage
 ) -> None:

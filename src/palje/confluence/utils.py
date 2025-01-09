@@ -1,3 +1,6 @@
+import random
+import string
+
 import click
 from palje.progress_tracker import ProgressTracker
 
@@ -34,6 +37,49 @@ def construct_confluence_page_title(
     return new_page_title.strip()
 
 
+def to_safe_filename(s: str, add_random_tail: bool = False) -> str:
+    """Converts a string to a safe filename by removing special characters. Optionally
+       adds a random tail to enforce uniqueness.
+
+    Arguments:
+    ----------
+
+    s : str
+        String to convert.
+
+    Returns:
+    --------
+
+    str
+    """
+    allowed_non_alphanums = (".", "_")
+    filename = "".join(
+        c for c in s if c.isalnum() or c in allowed_non_alphanums
+    ).rstrip()
+    if add_random_tail:
+        random_tail = "".join(
+            random.choices(string.ascii_lowercase + string.digits, k=8)
+        )
+        filename = f"{filename}_{random_tail}"
+    return filename
+
+
+def show_page_finding_progress(pt: ProgressTracker) -> None:
+    """Print current page finding progress to the console.
+
+    Arguments
+    ---------
+
+    pt : ProgressTracker
+        The progress tracker object.
+
+    """
+    click.echo(
+        f"\rChild pages found: {pt.target_total} ... {pt.elapsed_time:.2f}s",
+        nl=False,
+    )
+
+
 def show_page_sorting_progress(pt: ProgressTracker) -> None:
     """Print current page sorting progress to the console.
 
@@ -51,8 +97,8 @@ def show_page_sorting_progress(pt: ProgressTracker) -> None:
     )
 
 
-def show_page_finding_progress(pt: ProgressTracker) -> None:
-    """Print current page finding progress to the console.
+def show_page_creation_progress(pt: ProgressTracker) -> None:
+    """Print current page creation progress to the console.
 
     Arguments
     ---------
@@ -62,6 +108,24 @@ def show_page_finding_progress(pt: ProgressTracker) -> None:
 
     """
     click.echo(
-        f"\rChild pages found: {pt.target_total} ... {pt.elapsed_time:.2f}s",
+        f"\rCreating Confluence pages: {pt.passed} / {pt.target_total}"
+        + f" ... {pt.elapsed_time:.2f}s ... {pt.message: <150}",
+        nl=False,
+    )
+
+
+def show_db_data_collecting_progress(pt: ProgressTracker) -> None:
+    """Print current data collecting progress to the console.
+
+    Arguments
+    ---------
+
+    pt : ProgressTracker
+        The progress tracker object.
+
+    """
+    click.echo(
+        f"\rGathering data from the db: {pt.passed} / {pt.target_total}"
+        + f" ... {pt.elapsed_time:.2f}s ... {pt.message: <150}",
         nl=False,
     )
