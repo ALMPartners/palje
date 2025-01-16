@@ -34,9 +34,14 @@ steps:
       arguments: 'install --global azuresigntool'
     displayName: Install AzureSignTool
 
-  - bash: |
-      AzureSignTool sign -d "Palje" -kvu "$(kvURI)" -kvi $(ApplicationId) -kvt $(TenantId) -kvs $(ClientSecret) -kvc $(certName) -tr "http://ts.ssl.com" -td sha256 D:/a/1/s/dist/*.msi
-    displayName: Sign all msi-files in artefacts-directory
+  - task: AzureCLI@2
+    inputs:
+      azureSubscription: Az-signprod
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        AzureSignTool sign -d "Palje" -kvu "$(kvURI)" -kvm -kvt $(TenantId) -kvc $(certName) -tr "http://ts.ssl.com" -td sha256 D:/a/1/s/dist/*.msi
+    displayName: Sign files with cert from AzureKeyVault
 
   - task: PublishPipelineArtifact@1
     inputs:
