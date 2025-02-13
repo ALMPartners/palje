@@ -1,0 +1,34 @@
+# Only trigger pipeline when a merge happens to dev branch
+trigger:
+  branches:
+    include:
+    - dev
+    exclude:
+    - master
+  tags:
+    include:
+    - '*'
+
+# Do not trigger on any pull requests
+pr: none
+
+# Fetch variables from Azure DevOps variable-group via a YAML-file
+variables:
+  - template: azure-variables-template.yml
+
+# List of jobs for the pipeline to execute
+stages:
+- stage: UnitTest
+  displayName: Run unit tests
+  trigger: automatic
+  jobs:
+  - job: unitTest
+    displayName: Unit & coverage tests
+    pool:
+      name: Azure Pipelines
+      vmImage: "ubuntu-latest"
+    timeoutInMinutes: 20
+    steps:
+    - template: unit-test-template.yml
+      parameters:
+        pythonVersion: "3.12"
