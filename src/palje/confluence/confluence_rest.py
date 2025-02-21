@@ -96,6 +96,7 @@ class ConfluenceRestClientAsync:
         user_id: str,
         api_token: str,
         headers: dict | None = None,
+        request_limit: int = 0,
         progress_callback: Callable[[bool, str], None] | None = None,
     ) -> None:
         """Initialize the Confluence REST client.
@@ -116,6 +117,11 @@ class ConfluenceRestClientAsync:
             Optional headers to be used in the requests. Default headers are:
             `{"Content-Type": "application/json", "Accept": "application/json"}.`
 
+        request_limit
+            The maximum number of simultaneous connections to be used in the aiohttp
+            client. High number of connections may cause HTTP/500s. Value
+            of zero or less is interpreted as no limit (default).
+
         progress_callback
             Optional callback function that is called after each request.
             The callback function should accept [bool, str] params.
@@ -124,14 +130,21 @@ class ConfluenceRestClientAsync:
 
         """
 
-        # TODO: limit # of conns to some sane max with aiohttp.TCPConnector
         self._root_url = root_url
         if headers is None:
             headers = self._DEFAULT_HEADERS
-        self._client = aiohttp.ClientSession(
-            auth=aiohttp.BasicAuth(login=user_id, password=api_token),
-            headers=headers,
-        )
+
+        if request_limit > 0:
+            self._client = aiohttp.ClientSession(
+                auth=aiohttp.BasicAuth(login=user_id, password=api_token),
+                headers=headers,
+                connector=aiohttp.TCPConnector(limit=request_limit),
+            )
+        else:
+            self._client = aiohttp.ClientSession(
+                auth=aiohttp.BasicAuth(login=user_id, password=api_token),
+                headers=headers,
+            )
         self._progress_callback = progress_callback if progress_callback else None
 
     async def __aenter__(self) -> ConfluenceRestClientAsync:

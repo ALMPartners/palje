@@ -150,6 +150,16 @@ def _page_map_dict_to_entries(d: dict) -> ConfluencePageMapEntry:
     required=False,
     type=click.Path(exists=True, file_okay=False, writable=True),
 )
+@click.option(
+    "--request-limit",
+    help="The maximum number of concurrent requests to Confluence. High value may "
+    + "improve performance, but it may also cause HTTP/500s. "
+    + "Zero or less means no limit.",
+    type=int,
+    default=30,
+    show_default=True,
+    required=False,
+)
 def document_db_to_confluence(
     target_confluence_root_url: str,
     target_confluence_space_key: str,
@@ -165,6 +175,7 @@ def document_db_to_confluence(
     schema: tuple[str, ...],
     dependency_db: tuple[str, ...],
     work_dir: pathlib.Path | None,
+    request_limit: int,
 ) -> int:
     """Document database objects to Confluence.
 
@@ -213,11 +224,12 @@ def document_db_to_confluence(
     dependency_db : tuple[str, ...]
         The databases where object dependencies are sought.
 
-    use_concurrency : bool
-        Use concurrency to improve performance. Notice: page order will be random!
+    work_dir : pathlib.Path | None
+        The directory where the work files are stored. If not given, a temporary
+        directory is used.
 
-    max_concurrency : int
-        The maximum concurrency of the operation.
+    request_limit : int
+        The maximum number of concurrent requests to Confluence.
 
     Returns
     -------
@@ -328,6 +340,7 @@ def document_db_to_confluence(
                 doc_files_pt=data_collect_pt,
                 confl_sort_pt=confl_sort_pt,
                 work_dir=work_dir,
+                request_limit=request_limit,
             )
         )
         click.echo()
@@ -366,6 +379,7 @@ async def _document_db_to_confluence_async(
     confl_update_pt: ProgressTracker,
     confl_sort_pt: ProgressTracker,
     work_dir: pathlib.Path | None = None,
+    request_limit: int = 0,
 ):
 
     if not work_dir:
@@ -380,6 +394,7 @@ async def _document_db_to_confluence_async(
         tgt_atlassian_user_id,
         tgt_atlassian_api_token,
         progress_callback=doc_files_pt.step,
+        request_limit=request_limit,
     ) as confluence_client:
 
         click.echo(f"Checking Confluence permissions for page creation ... ", nl=False)
@@ -422,6 +437,7 @@ async def _document_db_to_confluence_async(
         tgt_atlassian_user_id,
         tgt_atlassian_api_token,
         progress_callback=confl_update_pt.step,
+        request_limit=request_limit,
     ) as confluence_client:
 
         # Read page map file
@@ -444,6 +460,7 @@ async def _document_db_to_confluence_async(
         tgt_atlassian_user_id,
         tgt_atlassian_api_token,
         progress_callback=confl_sort_pt.step,
+        request_limit=request_limit,
     ) as confluence_client:
 
         await sort_child_pages_alphabetically_async(
