@@ -36,6 +36,7 @@ ICON = Path(__file__).parent / "palje.png"
 if not ICON.exists():
     # When running the built version installed from the .msi
     ICON = Path(sys.executable).parent / "palje.png"
+MAX_CONFLUENCE_CONCURRENT_REQUESTS = 30
 
 
 class App(tk.Tk):
@@ -251,6 +252,7 @@ class Main(ttk.Frame):
 
     async def _test_confluence_connection(self) -> None:
         try:
+
             async with ConfluenceRestClientAsync(
                 self._confluence_widget.confluence_root_url,
                 self._confluence_widget.confluence_user_id,
@@ -266,6 +268,14 @@ class Main(ttk.Frame):
                 f"Connection error: {e}",
             )
             return
+        except Exception as e:
+            # TODO: in client, wrap specific errors into ConfluenceRESTErrors
+            #       with meaningful, displayable error messages e.g. "invalid URL"
+            messagebox.showerror(
+                "Connection error",
+                f"Please check the parameters and try again.",
+            )
+            return
         if not space_writable:
             messagebox.showerror(
                 "Connection error",
@@ -274,7 +284,7 @@ class Main(ttk.Frame):
         else:
             messagebox.showinfo(
                 "Connection OK",
-                "Connection to the Confluence with given paramters seems to work OK.",
+                "Connection to the Confluence with given parameters seems to work OK.",
             )
 
     def _on_test_confluence_connection_clicked(self) -> None:
@@ -336,7 +346,6 @@ class Main(ttk.Frame):
         self._progress_tracker = ProgressTracker(
             on_step_callback=self._update_progressbar
         )
-
         try:
 
             await _document_db_to_confluence_async(
@@ -351,6 +360,7 @@ class Main(ttk.Frame):
                 doc_files_pt=self._progress_tracker,
                 confl_sort_pt=self._progress_tracker,
                 dependency_db=[],
+                request_limit=MAX_CONFLUENCE_CONCURRENT_REQUESTS,
             )
 
             messagebox.showinfo(
