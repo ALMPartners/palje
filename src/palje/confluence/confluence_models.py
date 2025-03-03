@@ -116,7 +116,9 @@ class ConfluencePage:
         self._parent_page = parent_page
         if body_content and not body_format:
             raise ValueError("body_format must be provided if body_content is provided")
-        if body_format and (body_format not in ConfluencePageBodyFormat):
+        if body_format and (
+            ConfluencePageBodyFormat(body_format) not in ConfluencePageBodyFormat
+        ):
             formats_str = [x for x in ConfluencePageBodyFormat].join(", ")
             raise ValueError(
                 f"Invalid body_format: '{body_format}'. Expected one of: {formats_str}"

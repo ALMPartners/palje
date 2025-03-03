@@ -247,6 +247,10 @@ async def sort_child_pages_alphabetically_async(
         progress_tracker.target_total += len(child_pages)
 
     if len(child_pages) == 0:
+        if progress_tracker:
+            progress_tracker.step(
+                passed=True, message=f"Nothing to do for page {page_id}"
+            )
         semaphore.release()
         return
 
@@ -262,6 +266,11 @@ async def sort_child_pages_alphabetically_async(
     if wanted_first_page.id != current_first_page.id:
         await confluence_client.move_page_async(
             wanted_first_page.id, "before", current_first_page.id
+        )
+    if progress_tracker:
+        progress_tracker.step(
+            passed=True,
+            message=f"{wanted_first_page.title} with {len(sorted_children)} children",
         )
 
     # Move the rest of the pages after the first in correct order

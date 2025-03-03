@@ -103,7 +103,9 @@ def sort_confluence_page_hierarchy(
     recursive: bool = False,
     case_sensitive: bool = False,
 ) -> int:
-    page_sorting_pt = ProgressTracker(on_step_callback=show_page_sorting_progress)
+    page_sorting_pt = ProgressTracker(
+        on_step_callback=show_page_sorting_progress, target_total=1
+    )
 
     if not parent_page_id and not (parent_page_title):
         raise click.UsageError(
