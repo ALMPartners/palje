@@ -26,5 +26,9 @@ pipelines:
           image: python:3.11
       - step:
           <<: *python-default
-          name: "Python 3.12" 
+          name: "Python 3.12"
           image: python:3.12
+      - step:
+          <<: *python-default
+          name: "Python 3.13"
+          image: python:3.13
