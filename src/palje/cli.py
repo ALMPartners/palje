@@ -69,8 +69,8 @@ def print_progress(progress: ProgressTracker):
 
 async def main_async(argv: list[str] | None = None):
     print(
-        "\x1b[33;20mUsing legacy palje CLI. Consider switching to palje2 with more "
-        + "features. Use 'palje2 --help' to learn more.\x1b[0m"
+        "\x1b[33;20mUsing legacy palje CLI. This is DEPRECATED and will be dropped "
+        + "in the near future. You should not use this any longer!\x1b[0m"
     )
     (
         confluence_url,
@@ -227,7 +227,7 @@ def parse_arguments(args):
     parser.add_argument(
         "--version",
         action="version",
-        version=f"Palje v{PALJE_VERSION} (legacy CLI)",
+        version=f"Palje v{PALJE_VERSION} (legacy CLI, DEPRECATED)",
     )
 
     args = vars(parser.parse_args(args))

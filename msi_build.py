@@ -98,8 +98,8 @@ options = {"build_exe": build_exe_options, "bdist_msi": bdist_msi_options}
 
 base = "Win32GUI" if sys.platform == "win32" else None
 
-palje_exe = Executable("src/palje/cli.py", target_name="palje.exe", base=None)
-palje2_exe = Executable("src/palje/cli2.py", target_name="palje2.exe", base=None)
+palje_old_exe = Executable("src/palje/cli.py", target_name="palje-old.exe", base=None)
+palje_exe = Executable("src/palje/cli2.py", target_name="palje.exe", base=None)
 palje_gui_exe = Executable(
     "src/palje/gui/gui.py", target_name="palje-gui.exe", base=base, icon=icon
 )
@@ -111,6 +111,6 @@ setup(
     author_email=author_email,
     url=url,
     description=description,
-    executables=[palje_exe, palje2_exe, palje_gui_exe],
+    executables=[palje_old_exe, palje_exe, palje_gui_exe],
     options=options,
 )

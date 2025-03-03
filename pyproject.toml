@@ -39,8 +39,8 @@ test = ["tox ~= 4.15", "pytest-aiohttp ~= 1.0", "sqlalchemy[mssql] ~= 2.0.29"]
 msibuild = ["cx_freeze ~= 7.0"]
 
 [project.scripts]
-palje = "palje.cli:main"
-palje2 = "palje.cli2:main"
+palje-old = "palje.cli:main"
+palje = "palje.cli2:main"
 palje-gui = "palje.gui.gui:main"
 
 [build-system]

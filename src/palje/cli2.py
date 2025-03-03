@@ -26,7 +26,9 @@ def cli(ctx: click.Context, yes_to_all: bool = False):
     With palje commands you can e.g. generate Confluence documentation from databases
     and manage content in Confluence.
 
-    Use `palje2 COMMAND --help` to see more information on a specific command.
+    Use `palje COMMAND --help` to see more information on a specific command.
+
+    Looking for older version of palje? It's still availabe as `palje-old` command.
     """
     ctx.ensure_object(dict)
     ctx.obj["yes_to_all"] = yes_to_all
