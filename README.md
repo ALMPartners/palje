@@ -2,16 +2,15 @@ Palje
 ====================
 
 # Description
-Palje is a tool for creating hierarchical documentation of SQL Server databases to Confluence wiki.
+Palje is a tool for creating hierarchical documentation of SQL Server databases to Confluence and managing Confluence content.
 
 # Dependencies
-* [pyodbc](https://pypi.org/project/pyodbc/)
-* [requests](https://pypi.org/project/requests/)
+See [pyproject.toml](./pyproject.toml)
 
 # Install Guide
 
 ## PyPI
-Install from [Python Package Index](https://pypi.org/) with the following command:
+Install from the [Python Package Index](https://pypi.org/) with the following command:
 
 ```
 pip install palje
@@ -23,7 +22,7 @@ pip install palje
 
 ```
 cd .\palje
-pip install [-e] .
+pip install .
 ```
 
 ## Development environment
@@ -35,23 +34,24 @@ pip install -e .[dev, test]
 pre-commit install
 ```
 
-This takes `black` code formatting in use via `pre-commit`.
+This takes `black` code formatting (and other tools) into use via `pre-commit`.
 
 # Usage
 
-Palje can be used either from the command line (CLI) or from the graphical user interface (GUI).
+After successful installation, there are three new commands available: `palje`, `palje-gui`, and `palje-old`.
 
-Notice that there are two versions of the command-line tool: legacy `palje` and newer `palje2`. See below for details.
+Palje can be used either as a CLI tool (`palje`, `palje-old`) or via (limited) graphical user interface (`palje-gui`).
 
 ## Prerequisites
 
-- Read access to the MSSQL database you wish to document
-    - Data is read from documented database, information schema and system views
-    - You can use either SQL authentication or Windows authentication (if available)
+Before use, you should ensure that you have the following:
 
-- Write access to Confluence space on which you wish to create the documentation pages
+- Read access to a MSSQL database you wish to document
+    - Documentation is generated from the database metadata that is read from the database(s), information schema and system views
+    - You can use either SQL authentication, AAD, or Windows authentication
 
-- Atlassian API Token for your account
+- Read/Write access to a Confluence space to work with via Atlassian API Token
+    - In addition to db document creation, you may also sort and delete Confluence pages and page hierarchies
     - Palje uses your registered account email and API token to authenticate to Confluence Cloud
         - Go to https://id.atlassian.com/manage/api-tokens
         - Choose "Create API token"
@@ -61,15 +61,13 @@ Notice that there are two versions of the command-line tool: legacy `palje` and 
 ## Remarks on compatibility
 
 - Palje has been tested on multiple SQL Server versions, including [SQL Server images](https://hub.docker.com/_/microsoft-mssql-server)
-- Palje has been tested on cloud instances, such as Azure SQL Database
+- Palje has been tested on cloud database instances, such as Azure SQL Database
     - Palje supports Azure Active Directory authentication with argument --authentication "AAD"
-- Palje has been tested to work with Confluence Cloud
-    - There is a possibility that Palje works with Confluence Server since the Server REST API is similar to Cloud REST API
-    - Notice that the authentication works differently in Confluence Server
+- Palje has been tested to work with Confluence Cloud only
 
 ## Graphical user-interface
 
-Notice that GUI may be lacking some of the more advanced features that are available via CLI.
+Notice that GUI may be lacking some of the features that are available via CLI.
 
 ![Page hierarchy in Confluence](./images/palje_gui.PNG?raw=true)
 
@@ -82,28 +80,29 @@ palje-gui
 See the CLI documentation below for information on various parameters - it all applies to GUI, too.
 
 
-## CLI and arguments (current palje2 version)
-
-In comparison to `palje`, the new `palje2` CLI is more flexible and adds more features. For example, there
-are features for deleting and alphabetically sorting existing Confluence pages.
+## CLI and arguments
 
 See online help for up-to-date documentation for top-level options and sub-commands.
+
+Especially notice the `--yes-to-all` option that can be given to the root command to avoid all user input - this is esssential for scripted use!
+
 ```
-palje2 --help
+palje --help
 ```
 
 To see specific documentation for a sub-command, use the --help switch _after_ the sub-command e.g.
 
 ```
-palje2 document --help
-palje2 delete --help
+palje document --help
+palje delete --help
+palje sort --help
 ```
 
 ### Parameters from ENV vars
 
-With `palje2` many parameters (e.g. Confluence authentication params) can be set into ENV variables from where they are automatically read at runtime. This makes continous use more user-friendly: less repetative typing, shorter and clearer commands, sensitive data stays out of sight, etc.
+Many parameters (e.g. various authentication params) can be set into ENV variables from where they are automatically read at runtime. This makes continous use more user-friendly: less repetative typing, shorter and clearer commands, sensitive data stays out of sight, etc.
 
-Notice that using ENV vars is optional: alternatively you can type parameters on the command line and/or leave them off and let `palje2` interactively prompt for any required parameter values.
+Notice that using ENV vars is optional: alternatively you can type parameters on the command line and/or leave them off and let `palje` interactively prompt for any required parameter values.
 
 See the online-documentation for supported ENV vars and their exact names.
 
@@ -124,7 +123,7 @@ $env:PALJE_DB_PASSWORD = $null
 
 ### Experimental features
 
-There may be some features in `palje2` that are somewhat usable but known to be still incomplete or unreliable in some cases e.g. due to unresolved issues with Confluence API.
+There may be some features in `palje` that are ~somewhat usable but known to be still incomplete or unreliable e.g. due to unresolved issues with Confluence Cloud REST API.
 
 By default, these experimental features are hidden from the user and not available in regular use.
 
@@ -132,26 +131,30 @@ To make experimental features available, set some value to the special `PALJE_EX
 
 ```
 PS > $env:PALJE_EXPERIMENTAL_FEATURES_ENABLED = "1"
-PS > palje2 --help
+PS > palje --help
 Experimental features enabled.
-Usage: palje2 [OPTIONS] COMMAND [ARGS]...
+Usage: palje [OPTIONS] COMMAND [ARGS]...
 ...
 Commands:
   copy      Experimental: Copy pages or page hierarchies between...
 ...
 ```
 
-## CLI and arguments (legacy version)
+## Legacy CLI and arguments (deprecated)
+
+The old `palje` CLI is still available as `palje-old` command.
+
+Notice that the old CLI is **deprecated** and will be dropped completely in the near future.
 
 See online help for up-to-date documentation for available options.
 ```
-palje -h
+palje-old -h
 ```
 
 ### Basic syntax
 
 ```
-palje confluence-url space server database
+palje-old confluence-url space server database
                 --parent-page PARENT_PAGE
                 --schemas SCHEMAS [SCHEMAS ...]
                 --dependent DEPENDENT [DEPENDENT ...]
@@ -174,90 +177,35 @@ palje confluence-url space server database
 
 ## Usage example
 
-
-### Command-line interface
 ```
-# Run via a configured script endpoint ("palje.exe")
-palje "https://<your-org>.atlassian.net/" TEST "localhost,1433" MY_DB --schemas dbo store --dependent MY_OTHER_DB --authentication "SQL"
+palje-old "https://<your-org>.atlassian.net/" TEST "localhost,1433" MY_DB --schemas dbo store --dependent MY_OTHER_DB --authentication "SQL"
+```
 
-# Optionally you also run palje as a Python library module
-python -m palje "https://<your-org>.atlassian.net/" TEST "localhost,1433" MY_DB --schemas dbo store --dependent MY_OTHER_DB --authentication "SQL"
+## Testing
+
+Install palje with testing depencies.
 
 ```
-### Output
+pip install .[test]
 ```
-User for localhost,1433.MY_DB. If you wish to use Windows Authentication, hit enter: sa
-Password for user sa:
-Confluence user for https://<your-org>.atlassian.net/: example.user@youremail.com
-Atlassian API token for user example.user@youremail.com:
---------------------------
-Object dependencies are queried from the following databases: MY_DB, MY_OTHER_DB
---------------------------
-Page DATABASE: MY_DB created.
-Page MY_DB.dbo created.
-Page Tables MY_DB.dbo created.
-Page MY_DB.dbo.schema_version created.
-Page MY_DB.store created.
-Page Tables MY_DB.store created.
-Page MY_DB.store.Clients created.
-Page MY_DB.store.Products created.
-Page Procedures MY_DB.store created.
-Page MY_DB.store.spSELECT created.
+
+### Run unit tests with pytest
+
 ```
-### Result
-#### Page hierarchy in Confluence
-![Page hierarchy in Confluence](https://github.com/ALMPartners/palje/blob/master/images/confluence_hierarchy.PNG?raw=true)
-
-#### Page showing the database objects
-![Page "DATABASE: MY_DB"](https://github.com/ALMPartners/palje/blob/master/images/confluence_database.PNG?raw=true)
-
-#### Page showing the table information
-![Page "MY_DB.store.Clients"](https://github.com/ALMPartners/palje/blob/master/images/confluence_table.PNG?raw=true)
-
-### Re-run
-Re-running the command will result updating the existing pages
-```
-Page DATABASE: MY_DB updated.
-Page MY_DB.dbo updated.
-Page Tables MY_DB.dbo updated.
-Page MY_DB.dbo.schema_version updated.
-Page MY_DB.store updated.
-Page Tables MY_DB.store updated.
-Page MY_DB.store.Clients updated.
-Page MY_DB.store.Products updated.
-Page Procedures MY_DB.store updated.
-Page MY_DB.store.spSELECT updated.
-```
-If new objects have been created to database before re-run, new pages will be created for these objects. For example, if new procedure `store.spNEW_SELECT` is created to database, a new page `MY_DB.store.spNEW_SELECT` is created under page `Procedures MY_DB.store`.
-
-Notice that if you delete objects from database, Palje won't delete the corresponding pages from Confluence. You must manually delete the pages from wiki.
-
-## Tests
-
-Run tests with [tox](https://pypi.org/project/tox/)
-```
-pip install tox # OR install as an optional depencency with palje itself: pip install .[test]
-
-tox -- --mssql_host MSSQL_HOST --mssql_port MSSQL_PORT --mssql_username MSSQL_USER --mssql_password MSSQL_PASSWORD --mssql_driver MSSQL_DRIVER
-
-# without MSSQL tests
-tox
-```
-or [pytest](https://pypi.org/project/pytest/)
-```
-pip install pytest ahjo sqlalchemy
-
-pytest --mssql_host MSSQL_HOST --mssql_port MSSQL_PORT --mssql_username MSSQL_USER --mssql_password MSSQL_PASSWORD --mssql_driver MSSQL_DRIVER
-
-# without MSSQL tests
 pytest
 ```
 
-Notice that tests have dependencies to packages [ahjo](https://pypi.org/project/ahjo/) and [SQL Alchemy](https://pypi.org/project/SQLAlchemy/). To succesfully run SQL Server tests, you must have permissions to create a new database in instance.
+### Run unit tests for all supported, installed Python versions with tox
 
-## MSI installers
+```
+tox
+```
 
-Palje can be packaged into an MSI installer which can be used to install it into a Windows environment and easily update it later. Installers are self-contained, meaning that the package contains everything that is needed for running Palje (e.g. required parts of Python installation and all the 3rd party libraries and their dependencies are included).
+## Creating MSI installers
+
+Palje can be packaged into an MSI installer which can be used for installing palje into Windows environments and easily apply updates on it later.
+
+MSI installers are self-contained, meaning that the package contains everything that is needed for running Palje (e.g. required parts of Python installation and all the 3rd party libraries and their dependencies are included).
 
 ### Types of MSI installers
 
@@ -267,13 +215,13 @@ There two types of installers, `user` and `system`. The `user` installer is suit
 
 ### Local MSI builds
 
-**Notice:** using an unsigned installer can end up with Windows Defender blocking Palje as malware. There is an ALM Partners developer signing key available to overcome this problem. Ask team TA3 for help if you need to sign development MSIs for testing purposes.
+**Notice:** make sure you are using a supported Python version (see [msi_build.py](./msi_build.py)).
 
 To set up an environment for MSI builds, create a new venv, activate it, and install build dependencies.
 
 ```
-python venv <name-of-venv>
-./<name-of-venv>/Scripts/activate
+python venv buildvenv
+./buildvenv/Scripts/activate
 pip install .[msibuild]
 ```
 
