@@ -8,6 +8,20 @@ from cx_Freeze import Executable, setup
 
 from palje.version import version as palje_version
 
+# palje code is runnable with several Python versions but not all of them are
+# safe or otherwise suitable for bundling into MSI installers.
+# 3.11 has some dll security isssues, installers no more maintained by python.org
+# 3.13 is not yet supported by cx_Freeze
+SUPPORTED_PY_VERSIONS = [(3, 12)]
+
+runtime_py_ver = sys.version_info[:2]
+if not runtime_py_ver in SUPPORTED_PY_VERSIONS:
+    ok_pys = ", ".join([f"{ver[0]}.{ver[1]}" for ver in SUPPORTED_PY_VERSIONS])
+    raise RuntimeError(
+        f"Unsupported Python version {runtime_py_ver[0]}.{runtime_py_ver[1]} detected."
+        + f"\nSupported Python versions for palje MSI build are: {ok_pys}."
+    )
+
 # If the value in the named env var is set to "system" (case-insensitive),
 # a system ("all users") MSI installer will be created.
 # Any other or missing value creates a user installer ("single user").
