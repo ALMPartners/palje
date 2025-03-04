@@ -459,7 +459,6 @@ async def _document_db_to_confluence_async(
         tgt_confluence_root_url,
         tgt_atlassian_user_id,
         tgt_atlassian_api_token,
-        progress_callback=confl_sort_pt.step,
         request_limit=request_limit,
     ) as confluence_client:
 
