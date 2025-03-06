@@ -36,20 +36,29 @@ ICON = Path(__file__).parent / "palje.png"
 if not ICON.exists():
     # When running the built version installed from the .msi
     ICON = Path(sys.executable).parent / "palje.png"
-MAX_CONFLUENCE_CONCURRENT_REQUESTS = 30
+CONFLUENCE_REQUEST_LIMIT = 30
 
 
 class App(tk.Tk):
     def __init__(
         self,
+        args: argparse.Namespace,
         start_size: tuple[int, int] = DEFAULT_WINDOW_SIZE,
     ):
         super().__init__()
-        self.title(WINDOW_TITLE)
+        window_title = WINDOW_TITLE
+        if args.request_limit != CONFLUENCE_REQUEST_LIMIT:
+            if args.request_limit < 1:
+                window_title += f" (request limit: unlimited)"
+            else:
+                window_title += f" (request limit: {args.request_limit})"
+        self.title(window_title)
         self.iconphoto(True, tk.PhotoImage(file=ICON))
         self.geometry(f"{start_size[0]}x{start_size[1]}")
         self.configure(padx=WINDOW_PADDING, pady=WINDOW_PADDING)
-        Main(parent=self).pack(fill=tk.BOTH, expand=True)
+        Main(parent=self, request_limit=args.request_limit).pack(
+            fill=tk.BOTH, expand=True
+        )
 
         self.mainloop()
 
@@ -63,12 +72,16 @@ class Main(ttk.Frame):
     _progressbar: ttk.Progressbar
     _progressbar_var: tk.DoubleVar
 
-    _max_concurrency: int
+    _request_limit: int
 
-    def __init__(self, parent: tk.Misc | None = None, max_concurrency: int = 2):
+    def __init__(
+        self,
+        parent: tk.Misc | None = None,
+        request_limit: int = CONFLUENCE_REQUEST_LIMIT,
+    ):
         super().__init__(master=parent)
 
-        self._max_concurrency = max_concurrency
+        self._request_limit = request_limit
 
         self._progress_tracker = ProgressTracker()
         self._mssql_database = None
@@ -360,7 +373,7 @@ class Main(ttk.Frame):
                 doc_files_pt=self._progress_tracker,
                 confl_sort_pt=self._progress_tracker,
                 dependency_db=[],
-                request_limit=MAX_CONFLUENCE_CONCURRENT_REQUESTS,
+                request_limit=self._request_limit,
             )
 
             messagebox.showinfo(
@@ -398,11 +411,21 @@ def parse_args() -> argparse.Namespace:
         action="version",
         version=f"Palje GUI v{PALJE_VERSION}",
     )
+    parser.add_argument(
+        "--request-limit",
+        type=int,
+        default=CONFLUENCE_REQUEST_LIMIT,
+        help="Maximum number of concurrent requests to Confluence. "
+        + "Increase for faster processing, decrease to avoid Confluence errors. "
+        + f"Default: {CONFLUENCE_REQUEST_LIMIT}",
+        required=False,
+    )
     return parser.parse_args()
 
 
 def main():
-    _ = App()
+    args = parse_args()
+    _ = App(args)
 
 
 if __name__ == "__main__":
