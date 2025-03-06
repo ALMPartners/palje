@@ -27,6 +27,8 @@ from palje.confluence.confluence_rest import (
 from palje.progress_tracker import ProgressTracker
 from palje.mssql.mssql_database import MSSQLDatabaseAuthType, MSSQLDatabase
 
+CONFLUENCE_CONCURRENT_REQUESTS_LIMIT = 30
+
 
 def _ask_db_credentials(
     server: str, database: str, authentication: MSSQLDatabaseAuthType
@@ -82,6 +84,7 @@ async def main_async(argv: list[str] | None = None):
         database_filter,
         driver,
         authentication,
+        request_limit,
     ) = parse_arguments(argv)
 
     # ============ DATABASE CONNECTION ============
@@ -169,6 +172,7 @@ async def main_async(argv: list[str] | None = None):
         doc_files_pt=data_collect_pt,
         confl_update_pt=confl_update_pt,
         confl_sort_pt=confl_sort_pt,
+        request_limit=request_limit,
     )
 
     print(f'\rExecution time: {data_collect_pt.elapsed_time:.2f} seconds.{"":<150}\n')
@@ -229,6 +233,15 @@ def parse_arguments(args):
         action="version",
         version=f"Palje v{PALJE_VERSION} (legacy CLI, DEPRECATED)",
     )
+    parser.add_argument(
+        "--request-limit",
+        default=CONFLUENCE_CONCURRENT_REQUESTS_LIMIT,
+        type=int,
+        help="Maximum number of concurrent requests to Confluence API. "
+        + "Increase to speed up the process, decrease to avoid Confluence errors. "
+        + "Zero or less means unlmited. "
+        + f"Default is {CONFLUENCE_CONCURRENT_REQUESTS_LIMIT}.",
+    )
 
     args = vars(parser.parse_args(args))
     return (
@@ -241,6 +254,7 @@ def parse_arguments(args):
         args.get("dependent"),
         args.get("db_driver", "ODBC Driver 17 for SQL Server"),
         MSSQLDatabaseAuthType(args.get("authentication", "SQL")),
+        args.get("request_limit"),
     )
 
 
