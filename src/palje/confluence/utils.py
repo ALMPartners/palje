@@ -91,7 +91,7 @@ def show_page_sorting_progress(pt: ProgressTracker) -> None:
 
     """
     click.echo(
-        f"\rChild pages sorted: {pt.passed}/{pt.target_total} ... {pt.elapsed_time:.2f}s"
+        f"\rPages sorted: {pt.passed}/{pt.target_total} ... {pt.elapsed_time:.2f}s"
         + f" ... {pt.message : <150}",
         nl=False,
     )
