@@ -27,7 +27,7 @@ from palje.confluence.confluence_rest import (
 from palje.progress_tracker import ProgressTracker
 from palje.mssql.mssql_database import MSSQLDatabaseAuthType, MSSQLDatabase
 
-CONFLUENCE_CONCURRENT_REQUESTS_LIMIT = 30
+CONFLUENCE_CONCURRENT_REQUESTS_LIMIT = 20
 
 
 def _ask_db_credentials(

@@ -156,7 +156,7 @@ def _page_map_dict_to_entries(d: dict) -> ConfluencePageMapEntry:
     + "improve performance, but it may also cause HTTP/500s. "
     + "Zero or less means no limit.",
     type=int,
-    default=30,
+    default=20,
     show_default=True,
     required=False,
 )

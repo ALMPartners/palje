@@ -36,7 +36,7 @@ ICON = Path(__file__).parent / "palje.png"
 if not ICON.exists():
     # When running the built version installed from the .msi
     ICON = Path(sys.executable).parent / "palje.png"
-CONFLUENCE_REQUEST_LIMIT = 30
+CONFLUENCE_REQUEST_LIMIT = 20
 
 
 class App(tk.Tk):
